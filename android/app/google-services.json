@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "623866496245",
+    "project_id": "qfire-e4055",
+    "storage_bucket": "qfire-e4055.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:623866496245:android:a0dc06e02161c127df71bc",
+        "android_client_info": {
+          "package_name": "com.example.myapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "623866496245-dljredngiieovje87ni0nh9umreftp5o.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDWuzyOOu_-wedJMib4MCJzqsVtkaOGDpA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "623866496245-dljredngiieovje87ni0nh9umreftp5o.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
