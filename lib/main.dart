@@ -142,13 +142,8 @@ class _MyHomePageState extends State<MyHomePage> {
                         // Changed to ElevatedButton.icon for direct icon+text
                         style: ElevatedButton.styleFrom(
                           backgroundColor:
-                              Colors.greenAccent, // Background color
-                          foregroundColor: const Color.fromARGB(
-                            255,
-                            23,
-                            96,
-                            74,
-                          ), // Text and icon color
+                              const Color.fromARGB(255, 91, 216, 156), // Background color
+                          foregroundColor: const Color.fromARGB(255, 255, 255, 255), // Text and icon color
                         ),
                         onPressed: () {
                           // Button 1 action
@@ -188,118 +183,135 @@ class _MyHomePageState extends State<MyHomePage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  // The "Hot Deals" Text
-                  Text(
-                    'Hot Deals',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Color.fromARGB(232, 47, 47, 47),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: <Widget>[
-                        // First floating card
-                        Card(
+                  Row( // Use Row for horizontal layout
+                    children: <Widget>[
+                      Expanded( // Each card takes equal horizontal space
+                        child: Card(
                           elevation: 4.0,
-                          margin: const EdgeInsets.only(
-                            right: 8.0,
-                          ), // Added right margin for spacing
+                          margin: const EdgeInsets.symmetric(horizontal: 4.0), // Smaller horizontal margin
                           child: Container(
-                            width: 150,
-                            padding: const EdgeInsets.all(16.0),
+                            // Remove fixed width: 150
+                            padding: const EdgeInsets.all(8.0), // Reduced padding for tighter fit
                             child: Column(
-                              mainAxisSize: MainAxisSize.min,
+                              mainAxisSize: MainAxisSize.min, // Keep column as small as possible vertically
                               children: [
                                 Image.asset(
                                   'assets/logo.png',
-                                  height: 100,
-                                  width: 150,
-                                  fit: BoxFit.cover,
+                                  height: 80, // Reduced height for image
+                                  fit: BoxFit.contain, // Use contain to ensure image fits without cropping
                                 ),
-                                const SizedBox(
-                                  height: 8.0,
-                                ), // Spacing between image and text
+                                const SizedBox(height: 4.0), // Spacing between image and text
                                 const Text(
                                   'Deal 1',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13), // Smaller text
+                                  textAlign: TextAlign.center,
                                 ),
                                 const Text(
                                   'Description',
-                                ), // More descriptive
+                                  style: TextStyle(fontSize: 11), // Smaller text
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 4.0), // Spacing between text and button
+                                ElevatedButton(
+                                  onPressed: () {},
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), // Smaller button padding
+                                    textStyle: const TextStyle(fontSize: 12), // Smaller button text
+                                  ),
+                                  child: const Text('View deal'),
+                                ),
                               ],
                             ),
                           ),
                         ),
+                      ),
 
-                        // Second floating card
-                        Card(
+                      Expanded(
+                        child: Card(
                           elevation: 4.0,
-                          margin: const EdgeInsets.only(
-                            right: 8.0,
-                          ), // Added right margin
+                          margin: const EdgeInsets.symmetric(horizontal: 4.0),
                           child: Container(
-                            width: 150,
-                            padding: const EdgeInsets.all(16.0),
+                            padding: const EdgeInsets.all(8.0),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Image.asset(
                                   'assets/logo.png',
-                                  height: 100,
-                                  width: 150,
-                                  fit: BoxFit.cover,
+                                  height: 80,
+                                  fit: BoxFit.contain,
                                 ),
-                                const SizedBox(
-                                  height: 8.0,
-                                ), // Spacing between image and text
+                                const SizedBox(height: 4.0),
                                 const Text(
                                   'Deal 2',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  textAlign: TextAlign.center,
                                 ),
-                                const Text('Description'),
+                                const Text(
+                                  'Description',
+                                  style: TextStyle(fontSize: 11),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 4.0),
+                                ElevatedButton(
+                                  onPressed: () {},
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    textStyle: const TextStyle(fontSize: 12),
+                                  ),
+                                  child: const Text('View deal'),
+                                ),
                               ],
                             ),
                           ),
                         ),
-                        // You can add more cards here
-                        Card(
+                      ),
+
+                      Expanded(
+                        child: Card(
                           elevation: 4.0,
-                          margin: const EdgeInsets.only(right: 8.0),
+                          margin: const EdgeInsets.symmetric(horizontal: 4.0),
                           child: Container(
-                            width: 150,
-                            padding: const EdgeInsets.all(16.0),
+                            padding: const EdgeInsets.all(8.0),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Image.asset(
                                   'assets/logo.png',
-                                  height: 100,
-                                  width: 150,
-                                  fit: BoxFit.cover,
+                                  height: 80,
+                                  fit: BoxFit.contain,
                                 ),
-                                const SizedBox(height: 8.0),
+                                const SizedBox(height: 4.0),
                                 const Text(
                                   'Deal 3',
-                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  textAlign: TextAlign.center,
                                 ),
-                                const Text('Description'),
+                                const Text(
+                                  'Description',
+                                  style: TextStyle(fontSize: 11),
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 4.0),
+                                ElevatedButton(
+                                  onPressed: () {},
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    textStyle: const TextStyle(fontSize: 12),
+                                  ),
+                                  child: const Text('View deal'),
+                                ),
                               ],
                             ),
                           ),
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
 
-            const SizedBox(height: 80,), 
-
+            const SizedBox(height: 80),
           ],
         ),
       ),
