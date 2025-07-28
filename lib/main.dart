@@ -30,7 +30,6 @@ class MyApp extends StatelessWidget {
         ), // More similar green from image
         useMaterial3: true,
       ),
-      navigatorObservers: <NavigatorObserver>[observer],
       home: MyHomePage(
         title: 'Diskwento',
         analytics: analytics,
