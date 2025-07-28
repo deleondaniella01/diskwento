@@ -66,4 +66,5 @@ class DefaultFirebaseOptions {
     projectId: 'qfire-e4055',
     storageBucket: 'qfire-e4055.appspot.com',
   );
+
 }

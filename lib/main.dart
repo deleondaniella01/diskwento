@@ -1,41 +1,78 @@
+// main.dart
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+import 'package:location/location.dart';
 
-import 'firebase_options.dart'; // Make sure this file exists and is correct
+import 'firebase_options.dart';
+import 'screens/nearby_deals_screen.dart'; // Import the new NearbyDealsScreen
+import 'screens/new_deals_screen.dart'; // Import the new NewDealsScreen
+import 'screens/expiring_deals_screen.dart'; // Import the new ExpiringDealsScreen
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(const MyApp());
+
+  FirebaseAnalytics analytics = FirebaseAnalytics.instance;
+  FirebaseAnalyticsObserver observer = FirebaseAnalyticsObserver(
+    analytics: analytics,
+  );
+
+  runApp(MyApp(analytics: analytics, observer: observer));
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  final FirebaseAnalytics analytics;
+  final FirebaseAnalyticsObserver observer;
 
-  static FirebaseAnalytics analytics = FirebaseAnalytics.instance;
-  static FirebaseAnalyticsObserver observer = FirebaseAnalyticsObserver(
-    analytics: analytics,
-  );
+  const MyApp({super.key, required this.analytics, required this.observer});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Diskwento',
+      title: 'Dibs',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF67B08B),
-        ), // More similar green from image
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF5B69E4)),
         useMaterial3: true,
       ),
-      home: MyHomePage(
-        title: 'Diskwento',
-        analytics: analytics,
-        observer: observer,
-      ),
+      navigatorObservers: [observer],
+      home: MyHomePage(title: 'Dibs', analytics: analytics, observer: observer),
     );
+  }
+}
+
+// Helper function to convert hex string to Color object
+Color colorFromHex(String hexColor) {
+  hexColor = hexColor.toUpperCase().replaceAll("#", "");
+  if (hexColor.length == 6) {
+    hexColor = "FF$hexColor";
+  }
+  return Color(int.parse(hexColor, radix: 16));
+}
+
+// Helper function to map merchant_id (or a specific icon field) to IconData
+IconData getMerchantIcon(String merchantId) {
+  switch (merchantId.toLowerCase()) {
+    case 'jollibee':
+      return Icons.fastfood;
+    case 'mcdonalds':
+      return Icons.local_dining;
+    case 'grab':
+      return Icons.local_taxi;
+    case 'shopee':
+      return Icons.shopping_bag;
+    case 'lazada':
+      return Icons.devices_other;
+    case 'starbucks':
+      return Icons.local_cafe;
+    case 'bdo':
+      return Icons.account_balance;
+    default:
+      return Icons.store;
   }
 }
 
@@ -55,30 +92,137 @@ class MyHomePage extends StatefulWidget {
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  // Current index for the BottomNavigationBar
-  int _selectedIndex = 0;
+class Deal {
+  final String id;
+  final String title;
+  final String description;
+  final String bank;
+  final List<String> eligibleCards;
+  final String categories;
+  final String discountDetails;
+  final DateTime validUntil;
+  final String merchantId;
+  final String merchantName;
+  final String? merchantBranchName;
+  final String? merchantAddress;
+  final GeoPoint? merchantGeopoint;
+  final String? geohash;
 
-  void _onItemTapped(int index) {
-    setState(() {
-      _selectedIndex = index;
-    });
-    // You can navigate to different pages here based on index
-    // For now, we'll just show a toast.
-    switch (index) {
-      case 0:
-        setMessage('Deals tab selected');
-        break;
-      case 1:
-        setMessage('Saved tab selected');
-        break;
-      case 2:
-        setMessage('Profile tab selected');
-        break;
-      case 3:
-        setMessage('Settings tab selected');
-        break;
+  final IconData merchantIcon;
+  final String rightTagText;
+  final Color rightTagColor;
+
+  final double? price;
+  final String? distance;
+  final String? availability;
+
+  Deal({
+    required this.id,
+    required this.title,
+    required this.description,
+    required this.bank,
+    required this.eligibleCards,
+    required this.categories,
+    required this.discountDetails,
+    required this.validUntil,
+    required this.merchantId,
+    required this.merchantName,
+    this.merchantBranchName,
+    this.merchantAddress,
+    this.merchantGeopoint,
+    this.geohash,
+    required this.merchantIcon,
+    required this.rightTagText,
+    required this.rightTagColor,
+    this.price,
+    this.distance,
+    this.availability,
+  });
+
+  factory Deal.fromFirestore(DocumentSnapshot doc) {
+    Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+
+    DateTime parsedValidUntil;
+    if (data['valid_until'] is Timestamp) {
+      parsedValidUntil = (data['valid_until'] as Timestamp).toDate();
+    } else if (data['valid_until'] is String) {
+      parsedValidUntil = DateTime.parse(data['valid_until']);
+    } else {
+      parsedValidUntil = DateTime.now().add(const Duration(days: 30));
     }
+
+    IconData icon = getMerchantIcon(data['merchant_id'] ?? '');
+    Color tagColor = colorFromHex(data['tag_color_hex'] ?? '#BFE0C5');
+
+    GeoPoint? parsedGeopoint;
+    if (data['merchant_geopoint'] is GeoPoint) {
+      parsedGeopoint = data['merchant_geopoint'] as GeoPoint;
+    } else if (data['merchant_geopoint'] is Map) {
+      final geoMap = data['merchant_geopoint'] as Map<String, dynamic>;
+
+      double? latitude;
+      if (geoMap['latitude'] is num) {
+        latitude = (geoMap['latitude'] as num).toDouble();
+      } else if (geoMap['latitude'] is String) {
+        latitude = double.tryParse(geoMap['latitude']);
+      }
+
+      double? longitude;
+      if (geoMap['longitude'] is num) {
+        longitude = (geoMap['longitude'] as num).toDouble();
+      } else if (geoMap['longitude'] is String) {
+        longitude = double.tryParse(geoMap['longitude']);
+      }
+
+      if (latitude != null && longitude != null) {
+        parsedGeopoint = GeoPoint(latitude, longitude);
+      }
+    }
+
+    double? parsedPrice;
+    if (data['price'] is num) {
+      parsedPrice = (data['price'] as num).toDouble();
+    } else if (data['price'] is String) {
+      String priceString = data['price'].toString().replaceAll('₱', '').trim();
+      parsedPrice = double.tryParse(priceString);
+    }
+
+    return Deal(
+      id: doc.id,
+      title: data['title'] ?? 'No Title',
+      description: data['description'] ?? 'No description available.',
+      bank: data['bank'] ?? 'N/A',
+      eligibleCards: List<String>.from(data['eligible_cards'] ?? []),
+      categories: data['categories'] ?? 'General',
+      discountDetails: data['discount_details'] ?? 'No Discount',
+      validUntil: parsedValidUntil,
+      merchantId: data['merchant_id'] ?? 'unknown',
+      merchantName: data['merchant_name'] ?? 'Unknown Merchant',
+      merchantBranchName: data['merchant_branch_name'],
+      merchantAddress: data['merchant_address'],
+      merchantGeopoint: parsedGeopoint,
+      geohash: data['geohash'],
+      merchantIcon: icon,
+      rightTagText: data['discount_details'] ?? '',
+      rightTagColor: tagColor,
+      price: parsedPrice,
+      distance: data['distance'],
+      availability: data['availability'],
+    );
+  }
+}
+
+class _MyHomePageState extends State<MyHomePage> {
+  String _selectedCategory = 'All Categories';
+  LocationData? _currentLocation;
+  String _locationStatus = 'Checking location...';
+
+  final Location _location = Location();
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLocationAndGet();
   }
 
   void setMessage(String message) {
@@ -107,302 +251,526 @@ class _MyHomePageState extends State<MyHomePage> {
     setMessage('logEvent succeeded');
   }
 
+  void _selectCategoryFilter(String category) {
+    setState(() {
+      _selectedCategory = category;
+    });
+    setMessage('$category deals selected');
+  }
+
+  Future<void> _checkLocationAndGet() async {
+    bool serviceEnabled;
+    PermissionStatus permissionGranted;
+    LocationData locationData;
+
+    serviceEnabled = await _location.serviceEnabled();
+    if (!serviceEnabled) {
+      serviceEnabled = await _location.requestService();
+      if (!serviceEnabled) {
+        if (!mounted) return;
+        setState(() {
+          _locationStatus = 'Location services disabled.';
+        });
+        setMessage('Location services are disabled.');
+        return;
+      }
+    }
+
+    permissionGranted = await _location.hasPermission();
+    if (permissionGranted == PermissionStatus.denied) {
+      permissionGranted = await _location.requestPermission();
+      if (permissionGranted != PermissionStatus.granted) {
+        if (!mounted) return;
+        setState(() {
+          _locationStatus = 'Location permission denied.';
+        });
+        setMessage('Location permission denied.');
+        return;
+      }
+    }
+
+    try {
+      locationData = await _location.getLocation();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        _currentLocation = locationData;
+        _locationStatus = 'Location retrieved!';
+      });
+      setMessage(
+        'Location fetched: Lat ${_currentLocation!.latitude}, Lon ${_currentLocation!.longitude}',
+      );
+
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              NearbyDealsScreen(userLocation: _currentLocation!),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _locationStatus = 'Error getting location: ${e.toString()}';
+      });
+      setMessage('Error getting location: ${e.toString()}');
+    }
+  }
+
+  final CollectionReference _dealsCollection = FirebaseFirestore.instance
+      .collection('deals');
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        // The background color from the image seems to be a specific blue/purple
-        backgroundColor: const Color.fromARGB(
-          255,
-          93,
-          181,
-          239,
-        ), // Changed AppBar color
-        elevation: 0, // Remove shadow
-        title: Row(
-          children: [
-            Image.asset(
-              'assets/logo.png', // Assuming this is your Diskwento logo
-              height: 45,
-            ),
-
-            const SizedBox(width: 8),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: Stack(
-              children: [
-                const Icon(Icons.notifications, color: Colors.white),
-                Positioned(
-                  right: 0,
-                  top: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(1),
-                    decoration: BoxDecoration(
-                      color: Colors.red,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    constraints: const BoxConstraints(
-                      minWidth: 12,
-                      minHeight: 12,
-                    ),
-                    child: const Text(
-                      '1', // Notification count
-                      style: TextStyle(color: Colors.white, fontSize: 8),
-                      textAlign: TextAlign.center,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            onPressed: () {
-              setMessage('Notifications tapped');
-            },
+      backgroundColor: const Color(0xFFF1F4F9),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(80.0),
+        child: Container(
+          color: const Color(0xFFF1F4F9),
+          padding: const EdgeInsets.only(
+            top: 30.0,
+            left: 16.0,
+            right: 16.0,
+            bottom: 0,
           ),
-          const SizedBox(width: 8), // Some padding on the right
-        ],
-      ),
-      body: Container(
-        // Wrap body in a Container for the light purple background
-        color: const Color(
-          0xFFE8F0FE,
-        ), // Light blueish background color from image
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              // 1. Search Bar at the top
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: TextField(
-                  decoration: InputDecoration(
-                    hintText: 'Search deals, merchants, or categories',
-                    hintStyle: TextStyle(color: Colors.grey[600]),
-                    filled: true,
-                    fillColor: Colors.white,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(50),
-                      borderSide: BorderSide.none, // No border line
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE5E7FA),
+                      borderRadius: BorderRadius.circular(10.0),
                     ),
-                    prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                    contentPadding: const EdgeInsets.symmetric(
-                      vertical: 0,
-                      horizontal: 20,
-                    ), // Adjust padding
+                    child: const Center(
+                      child: Icon(
+                        Icons.local_offer,
+                        color: Color(0xFF5B69E4),
+                        size: 24,
+                      ),
+                    ),
                   ),
-                ),
-              ),
-
-              // 2. Category Buttons (from your previous code, adapted)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                child: SingleChildScrollView(
-                  // Make category buttons scrollable horizontally
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    // Use Row here, not Wrap
-                    spacing: 8.0, // horizontal space between buttons
-                    // runSpacing: 4.0, // runSpacing is for Wrap
-                    children: <Widget>[
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(
-                            0xFF2FB264,
-                          ), // Green from image
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(
-                              20,
-                            ), // Rounded corners
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          elevation: 0, // No shadow
-                        ),
-                        onPressed: () {
-                          setMessage('All deals tapped');
-                        },
-                        icon: const Icon(Icons.local_offer, size: 18),
-                        label: const Text(
-                          'All Deals',
-                          style: TextStyle(fontSize: 13),
+                  const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text(
+                        'Dibs',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF323B60),
                         ),
                       ),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.grey[700],
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            side: BorderSide(
-                              color: Colors.grey[300]!,
-                            ), // Light grey border
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          elevation: 0,
-                        ),
-                        onPressed: () {
-                          setMessage('Food & Dining tapped');
-                        },
-                        icon: const Icon(Icons.restaurant, size: 18),
-                        label: const Text(
-                          'Food & Dining',
-                          style: TextStyle(fontSize: 13),
-                        ),
+                      Text(
+                        'Your exclusive claim to best deals',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
                       ),
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.grey[700],
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            side: BorderSide(color: Colors.grey[300]!),
-                          ),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          elevation: 0,
-                        ),
-                        onPressed: () {
-                          setMessage('Electronics tapped');
-                        },
-                        icon: const Icon(
-                          Icons.devices_other,
-                          size: 18,
-                        ), // Example icon
-                        label: const Text(
-                          'Electronics',
-                          style: TextStyle(fontSize: 13),
-                        ),
-                      ),
-                      // Add more buttons as needed
                     ],
                   ),
-                ),
+                ],
               ),
-
-              const SizedBox(height: 16), // Space before deal cards start
-              // Deal Cards (now using a Column of custom DealCard widgets)
-              DealCard(
-                bankInitial: 'BPI',
-                bankColor: Colors.red[800]!, // Example color
-                dealTitle: "McDonald's Flash Deal",
-                categoryIcon: Icons.restaurant,
-                categoryText: 'Food & Dining',
-                description:
-                    "Get 25% discount on all McDonald's orders using BPI Credit Cards. Valid for dine-in and delivery.",
-                validUntil: 'Dec 31, 2024',
-                tagText: '25% OFF',
-                tagColor: const Color(0xFFBFE0C5), // Light green
-                tagTextColor: const Color(0xFF2FB264), // Darker green
-                isNew: true,
+              Stack(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE5E7FA),
+                      borderRadius: BorderRadius.circular(10.0),
+                    ),
+                    child: const Center(
+                      child: Text(
+                        'JD',
+                        style: TextStyle(
+                          color: Color(0xFF5B69E4),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: const Text(
+                        '3',
+                        style: TextStyle(color: Colors.white, fontSize: 10),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              DealCard(
-                bankInitial: 'BDO',
-                bankColor: Colors.blue[800]!, // Example color
-                dealTitle: "Lazada Mega Sale",
-                categoryIcon: Icons.devices_other, // Electronics icon
-                categoryText: 'Electronics',
-                description:
-                    "Up to 50% off on electronics and gadgets with BDO Debit Cards. Free shipping on orders over ₱1,500.",
-                validUntil: 'Jan 15, 2025',
-                tagText: 'UP TO 50%',
-                tagColor: const Color(0xFFFEE8EB), // Light red
-                tagTextColor: const Color(0xFFE56060), // Darker red
-                isNew: false,
-              ),
-              DealCard(
-                bankInitial: 'UB',
-                bankColor: Colors.orange[800]!, // Example color
-                dealTitle: "Grab Cashback Promo",
-                categoryIcon: Icons.local_taxi, // Transportation icon
-                categoryText: 'Transportation',
-                description:
-                    "Get 15% cashback on Grab rides with UnionBank Cards. Maximum cashback of P200 per user.",
-                validUntil: 'Nov 30, 2024',
-                tagText: '15% BACK',
-                tagColor: const Color(0xFFCCE4FF), // Light blue
-                tagTextColor: const Color(0xFF4285F4), // Darker blue
-                isNew: false,
-              ),
-
-              // Add more DealCard widgets as needed
-              const SizedBox(height: 80), // Space for FAB and bottom nav bar
             ],
           ),
         ),
       ),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+              child: Text(
+                'Good morning, John! 👋',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF323B60),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16.0),
+                ),
+                color: Colors.white,
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Deals for YOU',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF323B60),
+                        ),
+                      ),
+                      Text(
+                        'Personalized recommendations',
+                        style: TextStyle(fontSize: 14, color: Colors.grey[600]),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        children: [
+                          Expanded(
+                            child: InkWell(
+                              onTap: () {
+                                if (_currentLocation != null) {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => NearbyDealsScreen(
+                                        userLocation: _currentLocation!,
+                                      ),
+                                    ),
+                                  );
+                                } else {
+                                  _checkLocationAndGet();
+                                  setMessage(
+                                    'Getting location for nearby deals...',
+                                  );
+                                }
+                              },
+                              child: _buildRecommendationCardContent(
+                                color: const Color(0xFF5B69E4),
+                                icon: Icons.location_on,
+                                dealsCount: 8,
+                                title: 'Nearby',
+                                subtitle: _currentLocation != null
+                                    ? 'Lat: ${_currentLocation!.latitude!.toStringAsFixed(2)}, Lon: ${_currentLocation!.longitude!.toStringAsFixed(2)}'
+                                    : _locationStatus,
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const NewDealsScreen(),
+                                  ),
+                                );
+                                setMessage('New Deals tapped');
+                              },
+                              child: _buildRecommendationCardContent(
+                                color: const Color(0xFF4CAF50),
+                                icon: Icons.bolt,
+                                dealsCount: 12,
+                                title: 'New Deals',
+                                subtitle: 'Fresh offers\nLast 7 days',
+                              ),
+                            ),
+                          ),
+                          Expanded(
+                            child: InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        const ExpiringDealsScreen(),
+                                  ),
+                                );
+                                setMessage('Expiring tapped');
+                              },
+                              child: _buildRecommendationCardContent(
+                                color: const Color(0xFFE56060),
+                                icon: Icons.access_time,
+                                dealsCount: 5,
+                                title: 'Expiring',
+                                subtitle: 'Ending today\nDon\'t miss!',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16.0),
+              child: Text(
+                'All Deals',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF323B60),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16.0),
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: <Widget>[
+                    _buildCategoryFilterButton(
+                      'All Categories',
+                      _selectedCategory == 'All Categories',
+                      Colors.blue,
+                      () => _selectCategoryFilter('All Categories'),
+                    ),
+                    _buildCategoryFilterButton(
+                      'Food & Dining',
+                      _selectedCategory == 'Food & Dining',
+                      Colors.orange,
+                      () => _selectCategoryFilter('Food & Dining'),
+                    ),
+                    _buildCategoryFilterButton(
+                      'Travel',
+                      _selectedCategory == 'Travel',
+                      Colors.deepOrange,
+                      () => _selectCategoryFilter('Travel'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            StreamBuilder<QuerySnapshot>(
+              stream: _selectedCategory == 'All Categories'
+                  ? _dealsCollection.snapshots()
+                  : _dealsCollection
+                        .where('categories', isEqualTo: _selectedCategory)
+                        .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.hasError) {
+                  return Center(child: Text('Error: ${snapshot.error}'));
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Center(
+                      child: Text(
+                        'No deals found for this category.',
+                        style: TextStyle(fontSize: 16, color: Colors.grey),
+                      ),
+                    ),
+                  );
+                }
 
+                List<Deal> deals = snapshot.data!.docs.map((doc) {
+                  return Deal.fromFirestore(doc);
+                }).toList();
+
+                return Column(
+                  children: deals.map((deal) {
+                    return NewDealCard(
+                      merchantIcon: deal.merchantIcon,
+                      merchantName: deal.merchantName,
+                      categoryText: deal.categories,
+                      description: deal.description,
+                      validUntil: DateFormat('MMM dd').format(deal.validUntil),
+                      rightTagText: deal.discountDetails,
+                      rightTagColor: deal.rightTagColor,
+                      price: deal.price,
+                      distance: deal.distance,
+                      availability: deal.availability,
+                    );
+                  }).toList(),
+                );
+              },
+            ),
+            const SizedBox(height: 80),
+          ],
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _sendAnalyticsEvent,
-        tooltip: 'log analytics event',
-        backgroundColor: Theme.of(
-          context,
-        ).colorScheme.primary, // Using theme color
+        tooltip: 'Add new deal',
+        backgroundColor: const Color(0xFF5B69E4),
         foregroundColor: Colors.white,
-        child: const Icon(Icons.add),
+        shape: const CircleBorder(),
+        elevation: 6,
+        child: const Icon(Icons.add, size: 30),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
 
-      bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.local_offer),
-            label: 'Deals',
+  Widget _buildRecommendationCardContent({
+    required Color color,
+    required IconData icon,
+    required int dealsCount,
+    required String title,
+    required String subtitle,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 4.0),
+      padding: const EdgeInsets.all(12.0),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(12.0),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Icon(icon, color: Colors.white, size: 20),
+              Text(
+                '$dealsCount',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                ),
+              ),
+            ],
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.bookmark), label: 'Saved'),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profile'),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.settings),
-            label: 'Settings',
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          Text(
+            subtitle,
+            style: const TextStyle(
+              color: Color.fromRGBO(255, 255, 255, 0.8),
+              fontSize: 10,
+            ),
           ),
         ],
-        currentIndex: _selectedIndex,
-        selectedItemColor: const Color(0xFF7E57C2), // Selected icon color
-        unselectedItemColor: Colors.grey, // Unselected icon color
-        onTap: _onItemTapped,
-        type: BottomNavigationBarType.fixed, // Essential for more than 3 items
+      ),
+    );
+  }
+
+  Widget _buildCategoryFilterButton(
+    String category,
+    bool isSelected,
+    Color accentColor,
+    VoidCallback onPressed,
+  ) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: Container(
+        margin: const EdgeInsets.only(right: 8.0),
+        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        decoration: BoxDecoration(
+          color: isSelected ? accentColor : Colors.white,
+          borderRadius: BorderRadius.circular(20.0),
+          border: isSelected
+              ? Border.all(
+                  color: accentColor.withAlpha((255 * 0.8).round()),
+                  width: 1.0,
+                )
+              : Border.all(color: Colors.grey[300]!),
+        ),
+        child: Row(
+          children: [
+            if (category == 'All Categories')
+              const Icon(Icons.filter_list, size: 18, color: Colors.white),
+            if (category == 'All Categories') const SizedBox(width: 4),
+            Text(
+              category,
+              style: TextStyle(
+                color: isSelected ? Colors.white : Colors.grey[700],
+                fontSize: 13,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 }
 
-// -----------------------------------------------------------------------------
-// NEW CUSTOM WIDGET: DealCard
-// -----------------------------------------------------------------------------
-class DealCard extends StatelessWidget {
-  final String bankInitial;
-  final Color bankColor;
-  final String dealTitle;
-  final IconData categoryIcon;
+class NewDealCard extends StatelessWidget {
+  final IconData merchantIcon;
+  final String merchantName;
   final String categoryText;
   final String description;
   final String validUntil;
-  final String tagText;
-  final Color tagColor;
-  final Color tagTextColor;
-  final bool isNew;
+  final String rightTagText;
+  final Color rightTagColor;
+  final double? price;
+  final String? distance;
+  final String? availability;
 
-  const DealCard({
+  const NewDealCard({
     super.key,
-    required this.bankInitial,
-    required this.bankColor,
-    required this.dealTitle,
-    required this.categoryIcon,
+    required this.merchantIcon,
+    required this.merchantName,
     required this.categoryText,
     required this.description,
     required this.validUntil,
-    required this.tagText,
-    required this.tagColor,
-    required this.tagTextColor,
-    this.isNew = false,
+    required this.rightTagText,
+    required this.rightTagColor,
+    this.price,
+    this.distance,
+    this.availability,
   });
 
   @override
@@ -410,166 +778,188 @@ class DealCard extends StatelessWidget {
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       elevation: 2.0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12.0)),
-      child: Stack(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.0)),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Bank Initial Circle
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: bankColor,
-                        borderRadius: BorderRadius.circular(
-                          8.0,
-                        ), // Slightly rounded square
-                        // Use circle if you prefer
-                        // shape: BoxShape.circle,
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        bankInitial,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[200],
+                    borderRadius: BorderRadius.circular(12.0),
+                  ),
+                  child: Center(
+                    child: Icon(
+                      merchantIcon,
+                      size: 32,
+                      color: Colors.grey[700],
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
-                            dealTitle,
+                            merchantName,
                             style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: Colors.black87,
+                              color: Color(0xFF323B60),
                             ),
                           ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              Icon(
-                                categoryIcon,
-                                size: 16,
-                                color: Colors.grey[600],
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8.0,
+                              vertical: 4.0,
+                            ),
+                            decoration: BoxDecoration(
+                              color: rightTagColor,
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            child: Text(
+                              rightTagText,
+                              style: const TextStyle(
+                                color: Color(0xFF2FB264),
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                categoryText,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  description,
-                  style: const TextStyle(fontSize: 13, color: Colors.black54),
-                  maxLines: 3, // Limit description to 3 lines
-                  overflow:
-                      TextOverflow.ellipsis, // Add ellipsis if it overflows
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Valid until: $validUntil',
-                      style: TextStyle(fontSize: 11, color: Colors.grey[600]),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        // Action for "View Details"
-                        // For example: Navigator.push(context, MaterialPageRoute(builder: (context) => DealDetailsPage()));
-                        Fluttertoast.showToast(
-                          msg: "Viewing details for $dealTitle",
-                        );
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(
-                          0xFF4CAF50,
-                        ), // Green button color
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8.0),
-                        ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        elevation: 0, // No shadow
-                        textStyle: const TextStyle(fontSize: 13),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          if (distance != null)
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.location_on,
+                                  size: 14,
+                                  color: Colors.grey[600],
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  distance!,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey[600],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                              ],
+                            ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.grey[200],
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              categoryText,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey[700],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      child: const Text('View Details'),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),
-          ),
-          // Tag overlay (e.g., "25% OFF" or "NEW")
-          Positioned(
-            top: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 8.0,
-                vertical: 4.0,
-              ),
-              decoration: BoxDecoration(
-                color: tagColor,
-                borderRadius: const BorderRadius.only(
-                  topRight: Radius.circular(12.0),
-                  bottomLeft: Radius.circular(12.0),
-                ),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize
-                    .min, // To make the row only as wide as its children
-                children: [
-                  if (isNew) // Conditionally show "NEW" tag
-                    Padding(
-                      padding: const EdgeInsets.only(right: 4.0),
-                      child: Text(
-                        'NEW',
-                        style: TextStyle(
-                          color: const Color(0xFF2FB264), // Green color for NEW
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
+            const SizedBox(height: 12),
+            Text(
+              description,
+              style: const TextStyle(fontSize: 13, color: Colors.black54),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      price != null
+                          ? '₱${price!.toStringAsFixed(2)}'
+                          : (availability != null
+                                ? availability!
+                                : rightTagText),
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF323B60),
                       ),
                     ),
-                  Text(
-                    tagText,
-                    style: TextStyle(
-                      color: tagTextColor,
-                      fontSize: 13,
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.calendar_today,
+                          size: 12,
+                          color: Colors.grey[600],
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Valid until: $validUntil',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey[600],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    Fluttertoast.showToast(
+                      msg: "Viewing details for $merchantName deal",
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF5B69E4),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8.0),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 12,
+                    ),
+                    elevation: 0,
+                    textStyle: const TextStyle(
+                      fontSize: 14,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                ],
-              ),
+                  child: const Text('View Deal'),
+                ),
+              ],
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
