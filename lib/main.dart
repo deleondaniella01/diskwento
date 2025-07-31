@@ -29,6 +29,7 @@ Future<void> main() async {
   runApp(MyApp(analytics: analytics, observer: observer));
 }
 
+//test
 class MyApp extends StatelessWidget {
   final FirebaseAnalytics analytics;
   final FirebaseAnalyticsObserver observer;
