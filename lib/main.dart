@@ -17,6 +17,7 @@ import 'screens/expiring_deals_screen.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:geocoding/geocoding.dart';
 
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
