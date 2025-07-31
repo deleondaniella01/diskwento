@@ -62,19 +62,15 @@ Color colorFromHex(String hexColor) {
 // Helper function to map merchant_id (or a specific icon field) to IconData
 IconData getMerchantIcon(String merchantId) {
   switch (merchantId.toLowerCase()) {
-    case 'jollibee':
+    case 'fastfood':
       return Icons.fastfood;
-    case 'mcdonalds':
+    case 'dining':
       return Icons.local_dining;
-    case 'grab':
-      return Icons.local_taxi;
-    case 'shopee':
+    case 'shop':
       return Icons.shopping_bag;
-    case 'lazada':
-      return Icons.devices_other;
-    case 'starbucks':
-      return Icons.local_cafe;
-    case 'bdo':
+    case 'travel':
+      return Icons.airplanemode_active;
+    case 'banking':
       return Icons.account_balance;
     default:
       return Icons.store;
@@ -241,6 +237,9 @@ class _MyHomePageState extends State<MyHomePage> {
   // Stream for this month deals count
   Stream<int> _thisMonthDealsCountStream = Stream.value(0);
 
+  // Stream for this expiring deals count
+  Stream<int> _thisWeekExpiringDealsCountStream = Stream.value(0);
+
   @override
   void initState() {
     super.initState();
@@ -248,6 +247,7 @@ class _MyHomePageState extends State<MyHomePage> {
     _geoDealsCollection = GeoCollectionReference(_dealsCollection);
     _checkLocationAndGet();
     _thisMonthDealsCountStream = _getThisMonthDealsCountStream();
+    _thisWeekExpiringDealsCountStream = _getThisWeekExpiringDealsCountStream();
   }
 
   void setMessage(String message) {
@@ -587,6 +587,43 @@ class _MyHomePageState extends State<MyHomePage> {
         .onErrorReturn(0);
   }
 
+  Stream<int> _getThisWeekExpiringDealsCountStream() {
+    final now = DateTime.now();
+
+    // Calculate the start of the current week (Monday at 00:00:00)
+    // Dart's weekday: Monday is 1, Sunday is 7.
+    final startOfWeek = DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - 1));
+
+    // Calculate the end of the current week (Sunday at 23:59:59.999)
+    final endOfWeek =
+        DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day).add(
+          const Duration(
+            days: 6,
+            hours: 23,
+            minutes: 59,
+            seconds: 59,
+            milliseconds: 999,
+          ),
+        );
+
+    return _dealsCollection
+        .where(
+          'valid_until',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startOfWeek),
+        )
+        .where(
+          'valid_until',
+          isLessThanOrEqualTo: Timestamp.fromDate(endOfWeek),
+        )
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length)
+        .onErrorReturn(0); // Returns 0 if there's an error
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -619,52 +656,143 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Your exclusive claim to best deals',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
                 ],
               ),
-              Stack(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE5E7FA),
-                      borderRadius: BorderRadius.circular(10.0),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'JD',
-                        style: TextStyle(
-                          color: Color(0xFF5B69E4),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+              Builder(
+                builder: (BuildContext builderContext) {
+                  // Use a different name for the context
+                  return InkWell(
+                    onTap: () {
+                      // Use the builderContext here
+                      Scaffold.of(builderContext).openEndDrawer();
+                    },
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE5E7FA),
+                            borderRadius: BorderRadius.circular(10.0),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'JD',
+                              style: TextStyle(
+                                color: Color(0xFF5B69E4),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            decoration: BoxDecoration(
+                              color: Colors.red,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            constraints: const BoxConstraints(
+                              minWidth: 16,
+                              minHeight: 16,
+                            ),
+                            child: const Text(
+                              '3', // Your notification count
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 16,
-                        minHeight: 16,
-                      ),
-                      child: const Text(
-                        '3',
-                        style: TextStyle(color: Colors.white, fontSize: 10),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-                ],
+                  );
+                },
               ),
             ],
           ),
+        ),
+      ),
+      endDrawer: Drawer(
+        // This defines the content that slides in from the right
+        child: ListView(
+          padding: EdgeInsets.zero, // Important to remove default padding
+          children: <Widget>[
+            // You can customize the header of your drawer
+            const DrawerHeader(
+              decoration: BoxDecoration(
+                color: Color(0xFF5B69E4), // Match your app's primary color
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  CircleAvatar(
+                    radius: 30,
+                    backgroundColor: Colors.white,
+                    child: Text(
+                      'JD',
+                      style: TextStyle(
+                        color: Color(0xFF5B69E4),
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 10),
+                  Text(
+                    'John Doe', // Placeholder: Replace with actual user name
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    'john.doe@example.com', // Placeholder: Replace with actual user email
+                    style: TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                ],
+              ),
+            ),
+            // Example ListTiles for navigation
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('Profile'),
+              onTap: () {
+                Navigator.pop(context); // Close the drawer
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('Settings'),
+              onTap: () {
+                Navigator.pop(context); // Close the drawer
+              },
+            ),
+            const Divider(), // A visual separator
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('Logout'),
+              onTap: () {
+                Navigator.pop(context); // Close the drawer
+              },
+            ),
+          ],
         ),
       ),
       body: SingleChildScrollView(
@@ -789,14 +917,41 @@ class _MyHomePageState extends State<MyHomePage> {
                                         const ExpiringDealsScreen(),
                                   ),
                                 );
-                                setMessage('Expiring tapped');
+                                // Example of using Fluttertoast instead of a hypothetical 'setMessage'
+                                Fluttertoast.showToast(msg: 'Expiring tapped');
                               },
-                              child: _buildRecommendationCardContent(
-                                color: const Color(0xFFE56060),
-                                icon: Icons.access_time,
-                                dealsCount: 5,
-                                title: 'Expiring',
-                                subtitle: 'Ending today\nDon\'t miss!',
+                              child: StreamBuilder<int>(
+                                // Directly call the function here. You do NOT need to declare a field for it.
+                                stream: _thisWeekExpiringDealsCountStream,
+                                builder: (context, snapshot) {
+                                  int dealsCount = 0; // Default count
+
+                                  if (snapshot.connectionState ==
+                                      ConnectionState.active) {
+                                    if (snapshot.hasData) {
+                                      dealsCount = snapshot.data!;
+                                    } else if (snapshot.hasError) {
+                                      debugPrint(
+                                        'Error fetching expiring deals count: ${snapshot.error}',
+                                      );
+                                      dealsCount =
+                                          0; // Display 0 or handle error as needed
+                                    }
+                                  } else if (snapshot.connectionState ==
+                                      ConnectionState.waiting) {
+                                    dealsCount =
+                                        0; // Or show a loading indicator like '...'
+                                  }
+
+                                  return _buildRecommendationCardContent(
+                                    color: const Color(0xFFE56060),
+                                    icon: Icons.access_time,
+                                    dealsCount:
+                                        dealsCount, // This is the dynamically updated count
+                                    title: 'Expiring',
+                                    subtitle: 'Ending this \nweek!',
+                                  );
+                                },
                               ),
                             ),
                           ),
@@ -843,6 +998,12 @@ class _MyHomePageState extends State<MyHomePage> {
                       _selectedCategory == 'Travel',
                       Colors.deepOrange,
                       () => _selectCategoryFilter('Travel'),
+                    ),
+                    _buildCategoryFilterButton(
+                      'Shopping',
+                      _selectedCategory == 'Shopping',
+                      const Color.fromARGB(255, 233, 198, 57),
+                      () => _selectCategoryFilter('Shopping'),
                     ),
                   ],
                 ),
