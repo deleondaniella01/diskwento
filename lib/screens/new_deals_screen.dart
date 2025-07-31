@@ -14,7 +14,7 @@ class NewDealsScreen extends StatelessWidget {
       ),
       body: const Center(
         child: Text(
-          'Displaying New Deals',
+          'Displaying Deals for this Month',
           style: TextStyle(fontSize: 20, color: Colors.grey),
         ),
       ),

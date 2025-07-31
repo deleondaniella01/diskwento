@@ -43,10 +43,12 @@ dependencies:
   geoflutterfire_plus: ^0.0.32
   rxdart: ^0.28.0
   fluttertoast: 8.2.12
-  location: ^6.0.0
+  location: ^8.0.1
+  geocoding: ^4.0.0
   firebase_ai: ^2.2.1
   intl: ^0.20.2
   mockito: ^5.4.6
+  geolocator: ^14.0.2
 
 
 dev_dependencies:
@@ -68,6 +70,8 @@ flutter:
   assets:
     - assets/logo.png
     - assets/deal.jpeg
+    - assets/dibs.png
+
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.

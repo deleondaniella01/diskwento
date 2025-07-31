@@ -6,12 +6,16 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'package:location/location.dart';
+import 'package:location/location.dart' as loc;
+import 'package:geoflutterfire_plus/geoflutterfire_plus.dart'; // Import geoflutterfire_plus
+import 'package:geolocator/geolocator.dart';
 
 import 'firebase_options.dart';
-import 'screens/nearby_deals_screen.dart'; // Import the new NearbyDealsScreen
-import 'screens/new_deals_screen.dart'; // Import the new NewDealsScreen
-import 'screens/expiring_deals_screen.dart'; // Import the new ExpiringDealsScreen
+import 'screens/nearby_deals_screen.dart';
+import 'screens/new_deals_screen.dart';
+import 'screens/expiring_deals_screen.dart';
+import 'package:rxdart/rxdart.dart';
+import 'package:geocoding/geocoding.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -112,7 +116,6 @@ class Deal {
   final String rightTagText;
   final Color rightTagColor;
 
-  final double? price;
   final String? distance;
   final String? availability;
 
@@ -134,7 +137,6 @@ class Deal {
     required this.merchantIcon,
     required this.rightTagText,
     required this.rightTagColor,
-    this.price,
     this.distance,
     this.availability,
   });
@@ -152,39 +154,40 @@ class Deal {
     }
 
     IconData icon = getMerchantIcon(data['merchant_id'] ?? '');
-    Color tagColor = colorFromHex(data['tag_color_hex'] ?? '#BFE0C5');
+    Color tagColor = colorFromHex(data['tag_color_hex'] ?? '#1c1c1c');
 
     GeoPoint? parsedGeopoint;
-    if (data['merchant_geopoint'] is GeoPoint) {
-      parsedGeopoint = data['merchant_geopoint'] as GeoPoint;
-    } else if (data['merchant_geopoint'] is Map) {
-      final geoMap = data['merchant_geopoint'] as Map<String, dynamic>;
+    final dynamic rawGeopoint = data['merchant_geopoint'];
 
-      double? latitude;
-      if (geoMap['latitude'] is num) {
-        latitude = (geoMap['latitude'] as num).toDouble();
-      } else if (geoMap['latitude'] is String) {
-        latitude = double.tryParse(geoMap['latitude']);
-      }
-
-      double? longitude;
-      if (geoMap['longitude'] is num) {
-        longitude = (geoMap['longitude'] as num).toDouble();
-      } else if (geoMap['longitude'] is String) {
-        longitude = double.tryParse(geoMap['longitude']);
-      }
-
+    if (rawGeopoint is GeoPoint) {
+      parsedGeopoint = rawGeopoint;
+    } else if (rawGeopoint is Map<String, dynamic>) {
+      final double? latitude = (rawGeopoint['latitude'] is num)
+          ? (rawGeopoint['latitude'] as num).toDouble()
+          : null;
+      final double? longitude = (rawGeopoint['longitude'] is num)
+          ? (rawGeopoint['longitude'] as num).toDouble()
+          : null;
       if (latitude != null && longitude != null) {
         parsedGeopoint = GeoPoint(latitude, longitude);
       }
-    }
-
-    double? parsedPrice;
-    if (data['price'] is num) {
-      parsedPrice = (data['price'] as num).toDouble();
-    } else if (data['price'] is String) {
-      String priceString = data['price'].toString().replaceAll('₱', '').trim();
-      parsedPrice = double.tryParse(priceString);
+    } else if (rawGeopoint is String) {
+      // Attempt to parse the string format "[lat° N, lon° E]"
+      final RegExp regex = RegExp(r'\[(-?\d+\.?\d*)° N, (-?\d+\.?\d*)° E\]');
+      final Match? match = regex.firstMatch(rawGeopoint);
+      if (match != null && match.groupCount == 2) {
+        final double? latitude = double.tryParse(match.group(1)!);
+        final double? longitude = double.tryParse(match.group(2)!);
+        if (latitude != null && longitude != null) {
+          parsedGeopoint = GeoPoint(latitude, longitude);
+        } else {
+          debugPrint(
+            'Failed to parse latitude/longitude from string: $rawGeopoint',
+          );
+        }
+      } else {
+        debugPrint('String geopoint format not recognized: $rawGeopoint');
+      }
     }
 
     return Deal(
@@ -203,9 +206,8 @@ class Deal {
       merchantGeopoint: parsedGeopoint,
       geohash: data['geohash'],
       merchantIcon: icon,
-      rightTagText: data['discount_details'] ?? '',
+      rightTagText: data['bank'] ?? '',
       rightTagColor: tagColor,
-      price: parsedPrice,
       distance: data['distance'],
       availability: data['availability'],
     );
@@ -214,15 +216,37 @@ class Deal {
 
 class _MyHomePageState extends State<MyHomePage> {
   String _selectedCategory = 'All Categories';
-  LocationData? _currentLocation;
+  loc.LocationData? _currentLocation;
   String _locationStatus = 'Checking location...';
+  String _locationAddress = 'Fetching address...';
 
-  final Location _location = Location();
+  final loc.Location _location = loc.Location();
+
+  // Explicitly type _dealsCollection for GeoCollectionReference
+  final CollectionReference<Map<String, dynamic>> _dealsCollection =
+      FirebaseFirestore.instance
+          .collection('deals')
+          .withConverter<Map<String, dynamic>>(
+            fromFirestore: (snapshot, options) => snapshot.data()!,
+            toFirestore: (value, options) => value,
+          );
+
+  // Initialize GeoCollectionReference
+  late final GeoCollectionReference<Map<String, dynamic>> _geoDealsCollection;
+
+  // Stream for nearby deals count
+  Stream<int> _nearbyDealsCountStream = Stream.value(0);
+
+  // Stream for this month deals count
+  Stream<int> _thisMonthDealsCountStream = Stream.value(0);
 
   @override
   void initState() {
     super.initState();
+    // Initialize _geoDealsCollection with the correctly typed _dealsCollection
+    _geoDealsCollection = GeoCollectionReference(_dealsCollection);
     _checkLocationAndGet();
+    _thisMonthDealsCountStream = _getThisMonthDealsCountStream();
   }
 
   void setMessage(String message) {
@@ -260,8 +284,8 @@ class _MyHomePageState extends State<MyHomePage> {
 
   Future<void> _checkLocationAndGet() async {
     bool serviceEnabled;
-    PermissionStatus permissionGranted;
-    LocationData locationData;
+    loc.PermissionStatus permissionGranted;
+    loc.LocationData locationData;
 
     serviceEnabled = await _location.serviceEnabled();
     if (!serviceEnabled) {
@@ -270,6 +294,8 @@ class _MyHomePageState extends State<MyHomePage> {
         if (!mounted) return;
         setState(() {
           _locationStatus = 'Location services disabled.';
+          _locationAddress =
+              'Location services disabled.'; // Update address status as well
         });
         setMessage('Location services are disabled.');
         return;
@@ -277,12 +303,14 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     permissionGranted = await _location.hasPermission();
-    if (permissionGranted == PermissionStatus.denied) {
+    if (permissionGranted == loc.PermissionStatus.denied) {
       permissionGranted = await _location.requestPermission();
-      if (permissionGranted != PermissionStatus.granted) {
+      if (permissionGranted != loc.PermissionStatus.granted) {
         if (!mounted) return;
         setState(() {
           _locationStatus = 'Location permission denied.';
+          _locationAddress =
+              'Location permission denied.'; // Update address status as well
         });
         setMessage('Location permission denied.');
         return;
@@ -299,29 +327,264 @@ class _MyHomePageState extends State<MyHomePage> {
       setState(() {
         _currentLocation = locationData;
         _locationStatus = 'Location retrieved!';
+        // Update the nearby deals stream when location is available
+        _nearbyDealsCountStream = _getNearbyDealsCountStream(_currentLocation!);
       });
-      setMessage(
-        'Location fetched: Lat ${_currentLocation!.latitude}, Lon ${_currentLocation!.longitude}',
-      );
 
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              NearbyDealsScreen(userLocation: _currentLocation!),
-        ),
-      );
+      // Perform reverse geocoding
+      try {
+        List<Placemark> placemarks = await placemarkFromCoordinates(
+          _currentLocation!.latitude!,
+          _currentLocation!.longitude!,
+        );
+
+        if (placemarks.isNotEmpty) {
+          final Placemark first = placemarks.first;
+          setState(() {
+            _locationAddress = '${first.locality}, ${first.administrativeArea}';
+          });
+          setMessage(
+            'Location fetched: $_locationAddress',
+          ); // Show address in toast
+        } else {
+          setState(() {
+            _locationAddress = 'Address not found';
+          });
+          setMessage(
+            'Location fetched, but address not found.',
+          ); // Indicate address not found
+        }
+      } catch (e) {
+        setState(() {
+          _locationAddress = 'Error fetching address: ${e.toString()}';
+        });
+        setMessage(
+          'Location fetched, but error fetching address: ${e.toString()}',
+        ); // Show error in toast
+        debugPrint('Error fetching address: $e');
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _locationStatus = 'Error getting location: ${e.toString()}';
+        _locationAddress =
+            'Error getting location: ${e.toString()}'; // Update address status with error
       });
-      setMessage('Error getting location: ${e.toString()}');
+      setMessage(
+        'Error getting location: ${e.toString()}',
+      ); // Show error in toast
     }
   }
 
-  final CollectionReference _dealsCollection = FirebaseFirestore.instance
-      .collection('deals');
+  Stream<int> _getNearbyDealsCountStream(loc.LocationData userLocation) {
+    if (userLocation.latitude == null || userLocation.longitude == null) {
+      debugPrint(
+        '_getNearbyDealsCountStream: User location is null or invalid, returning 0 nearby deals.',
+      );
+      return Stream.value(0);
+    }
+
+    final GeoFirePoint center = GeoFirePoint(
+      GeoPoint(userLocation.latitude!, userLocation.longitude!),
+    );
+    debugPrint(
+      '_getNearbyDealsCountStream: GeoFirePoint Center: Lat: ${center.geopoint.latitude}, Lon: ${center.geopoint.longitude}',
+    );
+
+    const double radiusValue = 50; // In kilometers
+    const String geoPointFieldName = 'merchant_geopoint';
+
+    return _geoDealsCollection
+        .subscribeWithin(
+          center: center,
+          radiusInKm: radiusValue,
+          field: geoPointFieldName,
+          strictMode: false,
+          geopointFrom: (data) {
+            final dynamic rawGeopoint = data[geoPointFieldName];
+            final String docId = data['id'] ?? 'unknown';
+            if (rawGeopoint is GeoPoint) {
+              debugPrint(
+                'geopointFrom: Found native GeoPoint: ${rawGeopoint.latitude}, ${rawGeopoint.longitude} for doc ID: $docId',
+              );
+              return rawGeopoint;
+            } else if (rawGeopoint is Map<String, dynamic>) {
+              final double? latitude = (rawGeopoint['latitude'] is num)
+                  ? (rawGeopoint['latitude'] as num).toDouble()
+                  : null;
+              final double? longitude = (rawGeopoint['longitude'] is num)
+                  ? (rawGeopoint['longitude'] as num).toDouble()
+                  : null;
+              if (latitude != null && longitude != null) {
+                debugPrint(
+                  'geopointFrom: Found map GeoPoint: $latitude, $longitude for doc ID: $docId',
+                );
+                return GeoPoint(latitude, longitude);
+              } else {
+                debugPrint(
+                  'geopointFrom: Failed to parse lat/lon from map for doc ID: $docId. Invalid numbers or keys.',
+                );
+              }
+            } else if (rawGeopoint is String) {
+              // Parse the string format "[lat° N, lon° E]"
+              final RegExp regex = RegExp(
+                r'\[(-?\d+\.?\d*)° N, (-?\d+\.?\d*)° E\]',
+              );
+              final Match? match = regex.firstMatch(rawGeopoint);
+              if (match != null && match.groupCount == 2) {
+                final double? latitude = double.tryParse(match.group(1)!);
+                final double? longitude = double.tryParse(match.group(2)!);
+                if (latitude != null && longitude != null) {
+                  debugPrint(
+                    'geopointFrom: Parsed string GeoPoint: $latitude, $longitude for doc ID: $docId',
+                  );
+                  return GeoPoint(latitude, longitude);
+                } else {
+                  debugPrint(
+                    'geopointFrom: Failed to parse lat/lon from string: "$rawGeopoint" for doc ID: $docId. Invalid numbers.',
+                  );
+                }
+              } else {
+                debugPrint(
+                  'geopointFrom: String format not recognized: "$rawGeopoint" for doc ID: $docId. Regex failed.',
+                );
+              }
+            }
+            debugPrint(
+              'geopointFrom: No valid GeoPoint extracted from: "$rawGeopoint" for doc ID: $docId. Returning GeoPoint(0, 0).',
+            );
+            return GeoPoint(0, 0); // Fallback to a dummy GeoPoint
+          },
+        )
+        .map((snapshotList) {
+          debugPrint(
+            'Fetched ${snapshotList.length} raw documents within bounding box (before client-side distance filter).',
+          );
+          int actualCount = 0;
+          for (var doc in snapshotList) {
+            final GeoPoint? dealGeoPoint = _extractGeoPointFromDoc(
+              doc.data(),
+              geoPointFieldName,
+            );
+            if (dealGeoPoint != null &&
+                (dealGeoPoint.latitude != 0 || dealGeoPoint.longitude != 0)) {
+              // Only process if not the dummy (0,0) point
+              final double distance = Geolocator.distanceBetween(
+                dealGeoPoint.latitude,
+                dealGeoPoint.longitude,
+                center.geopoint.latitude,
+                center.geopoint.longitude,
+              );
+              debugPrint(
+                'Deal ID: ${doc.id}, Distance: ${distance.toStringAsFixed(2)} km, Title: ${doc.data()?['title']}',
+              );
+              if (distance <= radiusValue) {
+                actualCount++;
+              }
+            } else {
+              debugPrint(
+                'Could not extract valid GeoPoint for document ID: ${doc.id} or it was (0,0). Skipping.',
+              );
+            }
+          }
+          debugPrint(
+            'Final count of nearby deals after client-side filter: $actualCount',
+          );
+          return actualCount;
+        })
+        .onErrorReturn(0);
+  }
+
+  // Helper function to extract GeoPoint for debugging purposes (used in the .map block)
+  GeoPoint? _extractGeoPointFromDoc(
+    Map<String, dynamic>? data,
+    String fieldName,
+  ) {
+    if (data == null || !data.containsKey(fieldName)) {
+      debugPrint(
+        '_extractGeoPointFromDoc: Data is null or does not contain field "$fieldName".',
+      );
+      return null;
+    }
+    final dynamic rawGeopoint = data[fieldName];
+    final String docId =
+        data['id'] ?? 'unknown'; // Get document ID for better logging
+    debugPrint(
+      '_extractGeoPointFromDoc: Processing rawGeopoint: "$rawGeopoint" for doc ID: $docId',
+    );
+
+    if (rawGeopoint is GeoPoint) {
+      debugPrint(
+        '_extractGeoPointFromDoc: Found native GeoPoint: ${rawGeopoint.latitude}, ${rawGeopoint.longitude} for doc ID: $docId',
+      );
+      return rawGeopoint;
+    } else if (rawGeopoint is Map<String, dynamic>) {
+      final double? latitude = (rawGeopoint['latitude'] is num)
+          ? (rawGeopoint['latitude'] as num).toDouble()
+          : null;
+      final double? longitude = (rawGeopoint['longitude'] is num)
+          ? (rawGeopoint['longitude'] as num).toDouble()
+          : null;
+      if (latitude != null && longitude != null) {
+        debugPrint(
+          '_extractGeoPointFromDoc: Found map GeoPoint: $latitude, $longitude for doc ID: $docId',
+        );
+        return GeoPoint(latitude, longitude);
+      } else {
+        debugPrint(
+          '_extractGeoPointFromDoc: Failed to parse lat/lon from map for doc ID: $docId. Invalid numbers.',
+        );
+      }
+    } else if (rawGeopoint is String) {
+      // Parse the string format "[lat° N, lon° E]"
+      final RegExp regex = RegExp(r'\[(-?\d+\.?\d*)° N, (-?\d+\.?\d*)° E\]');
+      final Match? match = regex.firstMatch(rawGeopoint);
+      if (match != null && match.groupCount == 2) {
+        final double? latitude = double.tryParse(match.group(1)!);
+        final double? longitude = double.tryParse(match.group(2)!);
+        if (latitude != null && longitude != null) {
+          debugPrint(
+            '_extractGeoPointFromDoc: Parsed string GeoPoint: $latitude, $longitude for doc ID: $docId',
+          );
+          return GeoPoint(latitude, longitude);
+        } else {
+          debugPrint(
+            '_extractGeoPointFromDoc: Failed to parse lat/lon from string: "$rawGeopoint" for doc ID: $docId. Invalid numbers.',
+          );
+        }
+      } else {
+        debugPrint(
+          '_extractGeoPointFromDoc: String format not recognized: "$rawGeopoint" for doc ID: $docId. Regex failed.',
+        );
+      }
+    }
+    debugPrint(
+      '_extractGeoPointFromDoc: No valid GeoPoint extracted from: "$rawGeopoint" for doc ID: $docId. Returning null.',
+    );
+    return null;
+  }
+
+  // Method to get active deals count for the current month
+  Stream<int> _getThisMonthDealsCountStream() {
+    final now = DateTime.now();
+    // Start of the current month (e.g., July 1, 2025, 00:00:00)
+    final startOfMonth = DateTime(now.year, now.month, 1);
+    // End of the current month (last millisecond of the last day)
+    final endOfMonth = DateTime(now.year, now.month + 1, 0, 23, 59, 59, 999);
+
+    return _dealsCollection
+        .where(
+          'valid_until',
+          isGreaterThanOrEqualTo: Timestamp.fromDate(startOfMonth),
+        )
+        .where(
+          'valid_until',
+          isLessThanOrEqualTo: Timestamp.fromDate(endOfMonth),
+        )
+        .snapshots()
+        .map((snapshot) => snapshot.docs.length)
+        .onErrorReturn(0);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -349,33 +612,12 @@ class _MyHomePageState extends State<MyHomePage> {
                       color: const Color(0xFFE5E7FA),
                       borderRadius: BorderRadius.circular(10.0),
                     ),
-                    child: const Center(
-                      child: Icon(
-                        Icons.local_offer,
-                        color: Color(0xFF5B69E4),
-                        size: 24,
-                      ),
+                    child: Center(
+                      // Changed from const Center to Center
+                      child: Image.asset('assets/dibs.png'),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text(
-                        'Dibs',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF323B60),
-                        ),
-                      ),
-                      Text(
-                        'Your exclusive claim to best deals',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      ),
-                    ],
-                  ),
                 ],
               ),
               Stack(
@@ -488,14 +730,20 @@ class _MyHomePageState extends State<MyHomePage> {
                                   );
                                 }
                               },
-                              child: _buildRecommendationCardContent(
-                                color: const Color(0xFF5B69E4),
-                                icon: Icons.location_on,
-                                dealsCount: 8,
-                                title: 'Nearby',
-                                subtitle: _currentLocation != null
-                                    ? 'Lat: ${_currentLocation!.latitude!.toStringAsFixed(2)}, Lon: ${_currentLocation!.longitude!.toStringAsFixed(2)}'
-                                    : _locationStatus,
+                              child: StreamBuilder<int>(
+                                stream: _nearbyDealsCountStream,
+                                builder: (context, snapshot) {
+                                  int nearbyCount = snapshot.data ?? 0;
+                                  return _buildRecommendationCardContent(
+                                    color: const Color(0xFF5B69E4),
+                                    icon: Icons.location_on,
+                                    dealsCount: nearbyCount,
+                                    title: 'Nearby',
+                                    subtitle: _currentLocation != null
+                                        ? _locationAddress
+                                        : _locationStatus,
+                                  );
+                                },
                               ),
                             ),
                           ),
@@ -509,14 +757,24 @@ class _MyHomePageState extends State<MyHomePage> {
                                         const NewDealsScreen(),
                                   ),
                                 );
-                                setMessage('New Deals tapped');
+
+                                setMessage('This Month Deals tapped');
                               },
-                              child: _buildRecommendationCardContent(
-                                color: const Color(0xFF4CAF50),
-                                icon: Icons.bolt,
-                                dealsCount: 12,
-                                title: 'New Deals',
-                                subtitle: 'Fresh offers\nLast 7 days',
+                              child: StreamBuilder<int>(
+                                stream: _thisMonthDealsCountStream,
+                                builder: (context, snapshot) {
+                                  int thisMonthCount = snapshot.data ?? 0;
+                                  return _buildRecommendationCardContent(
+                                    color: Colors
+                                        .purple, // You can choose your preferred color
+                                    icon: Icons
+                                        .calendar_month, // You can choose your preferred icon
+                                    dealsCount: thisMonthCount,
+                                    title:
+                                        '${DateFormat('MMMM').format(DateTime.now())} Deals',
+                                    subtitle: 'Exclusive deals this month',
+                                  );
+                                },
                               ),
                             ),
                           ),
@@ -626,10 +884,12 @@ class _MyHomePageState extends State<MyHomePage> {
                       merchantName: deal.merchantName,
                       categoryText: deal.categories,
                       description: deal.description,
-                      validUntil: DateFormat('MMM dd').format(deal.validUntil),
-                      rightTagText: deal.discountDetails,
+                      validUntil: DateFormat(
+                        'MMM dd, yyyy',
+                      ).format(deal.validUntil),
+                      rightTagText: deal.bank,
                       rightTagColor: deal.rightTagColor,
-                      price: deal.price,
+                      discountDetails: deal.discountDetails,
                       distance: deal.distance,
                       availability: deal.availability,
                     );
@@ -755,7 +1015,7 @@ class NewDealCard extends StatelessWidget {
   final String validUntil;
   final String rightTagText;
   final Color rightTagColor;
-  final double? price;
+  final String discountDetails;
   final String? distance;
   final String? availability;
 
@@ -768,7 +1028,7 @@ class NewDealCard extends StatelessWidget {
     required this.validUntil,
     required this.rightTagText,
     required this.rightTagColor,
-    this.price,
+    required this.discountDetails,
     this.distance,
     this.availability,
   });
@@ -831,7 +1091,7 @@ class NewDealCard extends StatelessWidget {
                             child: Text(
                               rightTagText,
                               style: const TextStyle(
-                                color: Color(0xFF2FB264),
+                                color: Color.fromARGB(255, 255, 255, 255),
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
                               ),
@@ -879,6 +1139,28 @@ class NewDealCard extends StatelessWidget {
                               ),
                             ),
                           ),
+                          Container(
+                            margin: EdgeInsets.symmetric(
+                              horizontal: 5.0,
+                              vertical: 0,
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color.fromARGB(255, 164, 231, 156),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              discountDetails,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: const Color.fromARGB(255, 34, 98, 53),
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -900,19 +1182,6 @@ class NewDealCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      price != null
-                          ? '₱${price!.toStringAsFixed(2)}'
-                          : (availability != null
-                                ? availability!
-                                : rightTagText),
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF323B60),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
                     Row(
                       children: [
                         Icon(
