@@ -328,6 +328,7 @@ class _MyHomePageState extends State<MyHomePage> {
       setState(() {
         _currentLocation = locationData;
         _locationStatus = 'Location retrieved!';
+        debugPrint('user location:$_currentLocation');
         // Update the nearby deals stream when location is available
         _nearbyDealsCountStream = _getNearbyDealsCountStream(_currentLocation!);
       });
@@ -388,13 +389,21 @@ class _MyHomePageState extends State<MyHomePage> {
     final GeoFirePoint center = GeoFirePoint(
       GeoPoint(userLocation.latitude!, userLocation.longitude!),
     );
+
+    debugPrint(
+      '_getNearbyDealsCountStream: User Location GeoPoint: Lat: ${userLocation.latitude}, Lon: ${userLocation.longitude}',
+    ); // Print user location
+
     debugPrint(
       '_getNearbyDealsCountStream: GeoFirePoint Center: Lat: ${center.geopoint.latitude}, Lon: ${center.geopoint.longitude}',
-    );
+    ); // Print the center point used for the query
 
-    const double radiusValue = 50; // In kilometers
+    const double radiusValue = 50; // Keep this at 50 for now
     const String geoPointFieldName = 'merchant_geopoint';
 
+    debugPrint(
+      '_getNearbyDealsCountStream: Querying with radius $radiusValue km and field "$geoPointFieldName"',
+    ); // Print query parameters
     return _geoDealsCollection
         .subscribeWithin(
           center: center,
@@ -404,11 +413,12 @@ class _MyHomePageState extends State<MyHomePage> {
           geopointFrom: (data) {
             final dynamic rawGeopoint = data[geoPointFieldName];
             final String docId = data['id'] ?? 'unknown';
+            debugPrint(
+              'geopointFrom: Received raw data for doc ID $docId: $rawGeopoint',
+            );
+            GeoPoint? extractedGeopoint;
             if (rawGeopoint is GeoPoint) {
-              debugPrint(
-                'geopointFrom: Found native GeoPoint: ${rawGeopoint.latitude}, ${rawGeopoint.longitude} for doc ID: $docId',
-              );
-              return rawGeopoint;
+              extractedGeopoint = rawGeopoint;
             } else if (rawGeopoint is Map<String, dynamic>) {
               final double? latitude = (rawGeopoint['latitude'] is num)
                   ? (rawGeopoint['latitude'] as num).toDouble()
@@ -417,10 +427,7 @@ class _MyHomePageState extends State<MyHomePage> {
                   ? (rawGeopoint['longitude'] as num).toDouble()
                   : null;
               if (latitude != null && longitude != null) {
-                debugPrint(
-                  'geopointFrom: Found map GeoPoint: $latitude, $longitude for doc ID: $docId',
-                );
-                return GeoPoint(latitude, longitude);
+                extractedGeopoint = GeoPoint(latitude, longitude);
               } else {
                 debugPrint(
                   'geopointFrom: Failed to parse lat/lon from map for doc ID: $docId. Invalid numbers or keys.',
@@ -436,10 +443,7 @@ class _MyHomePageState extends State<MyHomePage> {
                 final double? latitude = double.tryParse(match.group(1)!);
                 final double? longitude = double.tryParse(match.group(2)!);
                 if (latitude != null && longitude != null) {
-                  debugPrint(
-                    'geopointFrom: Parsed string GeoPoint: $latitude, $longitude for doc ID: $docId',
-                  );
-                  return GeoPoint(latitude, longitude);
+                  extractedGeopoint = GeoPoint(latitude, longitude);
                 } else {
                   debugPrint(
                     'geopointFrom: Failed to parse lat/lon from string: "$rawGeopoint" for doc ID: $docId. Invalid numbers.',
@@ -451,10 +455,27 @@ class _MyHomePageState extends State<MyHomePage> {
                 );
               }
             }
-            debugPrint(
-              'geopointFrom: No valid GeoPoint extracted from: "$rawGeopoint" for doc ID: $docId. Returning GeoPoint(0, 0).',
-            );
-            return GeoPoint(0, 0); // Fallback to a dummy GeoPoint
+            // Check if the extracted GeoPoint is (0,0) and return null if it is.
+            if (extractedGeopoint != null &&
+                extractedGeopoint.latitude == 0 &&
+                extractedGeopoint.longitude == 0) {
+              debugPrint(
+                'geopointFrom: Found GeoPoint(0, 0) for doc ID: $docId. Treating as invalid.',
+              );
+              return GeoPoint(0, 0); // Treat (0,0) as invalid
+            }
+            // Return the extracted geopoint or null if none was valid
+            if (extractedGeopoint != null) {
+              debugPrint(
+                'geopointFrom: Successfully extracted GeoPoint: ${extractedGeopoint.latitude}, ${extractedGeopoint.longitude} for doc ID: $docId',
+              );
+              return extractedGeopoint;
+            } else {
+              debugPrint(
+                'geopointFrom: No valid GeoPoint extracted from: "$rawGeopoint" for doc ID: $docId. Returning null.',
+              );
+              return GeoPoint(0, 0);
+            }
           },
         )
         .map((snapshotList) {
@@ -477,8 +498,8 @@ class _MyHomePageState extends State<MyHomePage> {
                 center.geopoint.longitude,
               );
               debugPrint(
-                'Deal ID: ${doc.id}, Distance: ${distance.toStringAsFixed(2)} km, Title: ${doc.data()?['title']}',
-              );
+                'Deal ID: ${doc.id}, Distance: ${distance.toStringAsFixed(2)} m, Title: ${doc.data()?['title']}',
+              ); // Distance is in meters
               if (distance <= radiusValue) {
                 actualCount++;
               }
@@ -515,6 +536,12 @@ class _MyHomePageState extends State<MyHomePage> {
     );
 
     if (rawGeopoint is GeoPoint) {
+      if (rawGeopoint.latitude == 0 && rawGeopoint.longitude == 0) {
+        debugPrint(
+          '_extractGeoPointFromDoc: Found GeoPoint(0, 0) for doc ID: $docId. Treating as invalid.',
+        );
+        return null; // Treat (0,0) as invalid
+      }
       debugPrint(
         '_extractGeoPointFromDoc: Found native GeoPoint: ${rawGeopoint.latitude}, ${rawGeopoint.longitude} for doc ID: $docId',
       );
@@ -527,6 +554,12 @@ class _MyHomePageState extends State<MyHomePage> {
           ? (rawGeopoint['longitude'] as num).toDouble()
           : null;
       if (latitude != null && longitude != null) {
+        if (latitude == 0 && longitude == 0) {
+          debugPrint(
+            '_extractGeoPointFromDoc: Found map GeoPoint(0, 0) for doc ID: $docId. Treating as invalid.',
+          );
+          return null; // Treat (0,0) as invalid
+        }
         debugPrint(
           '_extractGeoPointFromDoc: Found map GeoPoint: $latitude, $longitude for doc ID: $docId',
         );
@@ -544,6 +577,12 @@ class _MyHomePageState extends State<MyHomePage> {
         final double? latitude = double.tryParse(match.group(1)!);
         final double? longitude = double.tryParse(match.group(2)!);
         if (latitude != null && longitude != null) {
+          if (latitude == 0 && longitude == 0) {
+            debugPrint(
+              '_extractGeoPointFromDoc: Parsed string GeoPoint(0, 0) for doc ID: $docId. Treating as invalid.',
+            );
+            return null; // Treat (0,0) as invalid
+          }
           debugPrint(
             '_extractGeoPointFromDoc: Parsed string GeoPoint: $latitude, $longitude for doc ID: $docId',
           );
@@ -562,7 +601,7 @@ class _MyHomePageState extends State<MyHomePage> {
     debugPrint(
       '_extractGeoPointFromDoc: No valid GeoPoint extracted from: "$rawGeopoint" for doc ID: $docId. Returning null.',
     );
-    return null;
+    return null; // Return null for any other invalid or missing cases
   }
 
   // Method to get active deals count for the current month
