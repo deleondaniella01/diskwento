@@ -1,0 +1,21 @@
+# Ignore common build and dependency directories
+build/
+dist/
+node_modules/
+.venv/
+Pods/
+target/
+__pycache__/
+.next/
+.svelte-kit/
+
+# Ignore log files
+*.log
+
+# Ignore temporary files
+*.tmp
+temp/
+
+# Ignore large data files that are not code
+data/*.csv
+data/*.json

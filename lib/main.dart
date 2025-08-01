@@ -9,6 +9,7 @@ import 'package:intl/intl.dart';
 import 'package:location/location.dart' as loc;
 import 'package:geoflutterfire_plus/geoflutterfire_plus.dart'; // Import geoflutterfire_plus
 import 'package:geolocator/geolocator.dart';
+import 'package:myapp/screens/personalized_deals_screen.dart';
 
 import 'firebase_options.dart';
 import 'screens/nearby_deals_screen.dart';
@@ -771,7 +772,7 @@ class _MyHomePageState extends State<MyHomePage> {
                                         .calendar_month, // You can choose your preferred icon
                                     dealsCount: thisMonthCount,
                                     title:
-                                        '${DateFormat('MMMM').format(DateTime.now())} Deals',
+                                        '${DateFormat('MMM').format(DateTime.now())} Deals',
                                     subtitle: 'Exclusive deals this month',
                                   );
                                 },
