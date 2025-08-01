@@ -9,7 +9,6 @@ import 'package:intl/intl.dart';
 import 'package:location/location.dart' as loc;
 import 'package:geoflutterfire_plus/geoflutterfire_plus.dart'; // Import geoflutterfire_plus
 import 'package:geolocator/geolocator.dart';
-import 'package:myapp/screens/personalized_deals_screen.dart';
 
 import 'firebase_options.dart';
 import 'screens/nearby_deals_screen.dart';
@@ -119,6 +118,7 @@ class Deal {
 
   final String? distance;
   final String? availability;
+  final String? termsAndConditions;
 
   Deal({
     required this.id,
@@ -126,6 +126,7 @@ class Deal {
     required this.description,
     required this.bank,
     required this.eligibleCards,
+    required this.termsAndConditions,
     required this.categories,
     required this.discountDetails,
     required this.validUntil,
@@ -196,7 +197,6 @@ class Deal {
       title: data['title'] ?? 'No Title',
       description: data['description'] ?? 'No description available.',
       bank: data['bank'] ?? 'N/A',
-      eligibleCards: List<String>.from(data['eligible_cards'] ?? []),
       categories: data['categories'] ?? 'General',
       discountDetails: data['discount_details'] ?? 'No Discount',
       validUntil: parsedValidUntil,
@@ -211,11 +211,13 @@ class Deal {
       rightTagColor: tagColor,
       distance: data['distance'],
       availability: data['availability'],
+      termsAndConditions: data['terms_and_conditions'] ?? 'No terms and conditions available.',
+      eligibleCards: List<String>.from(data['eligible_cards'] ?? []),
     );
   }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   String _selectedCategory = 'All Categories';
   loc.LocationData? _currentLocation;
   String _locationStatus = 'Checking location...';
@@ -241,13 +243,33 @@ class _MyHomePageState extends State<MyHomePage> {
   // Stream for this month deals count
   Stream<int> _thisMonthDealsCountStream = Stream.value(0);
 
+// Stream for this expiring deals count
+ Stream<int> _thisWeekExpiringDealsCountStream = Stream.value(0);
+
   @override
   void initState() {
     super.initState();
-    // Initialize _geoDealsCollection with the correctly typed _dealsCollection
+    WidgetsBinding.instance.addObserver(this); // Add observer
     _geoDealsCollection = GeoCollectionReference(_dealsCollection);
     _checkLocationAndGet();
     _thisMonthDealsCountStream = _getThisMonthDealsCountStream();
+    _thisWeekExpiringDealsCountStream = _getThisWeekExpiringDealsCountStream();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // Remove observer
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // Refresh the stream when app comes to foreground
+      setState(() {
+        _thisWeekExpiringDealsCountStream = _getThisWeekExpiringDealsCountStream();
+      });
+    }
   }
 
   void setMessage(String message) {
@@ -587,6 +609,62 @@ class _MyHomePageState extends State<MyHomePage> {
         .onErrorReturn(0);
   }
 
+  Stream<int> _getThisWeekExpiringDealsCountStream() {
+   final now = DateTime.now();
+
+
+   // Calculate the start of the current week (Monday at 00:00:00)
+   // Dart's weekday: Monday is 1, Sunday is 7.
+   final startOfWeek = DateTime(
+     now.year,
+     now.month,
+     now.day,
+   ).subtract(Duration(days: now.weekday - 1));
+
+
+   // Calculate the end of the current week (Sunday at 23:59:59.999)
+   final endOfWeek =
+       DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day).add(
+         const Duration(
+           days: 6,
+           hours: 23,
+           minutes: 59,
+           seconds: 59,
+           milliseconds: 999,
+         ),
+       );
+
+
+   return _dealsCollection
+       .where(
+         'valid_until',
+         isGreaterThanOrEqualTo: Timestamp.fromDate(startOfWeek),
+       )
+       .where(
+         'valid_until',
+         isLessThanOrEqualTo: Timestamp.fromDate(endOfWeek),
+       )
+       .snapshots()
+       .map((snapshot) {
+         // Only count deals where valid_until is still in the future
+         return snapshot.docs.where((doc) {
+           final data = doc.data();
+           final validUntil = data['valid_until'];
+           DateTime validUntilDate;
+           if (validUntil is Timestamp) {
+             validUntilDate = validUntil.toDate();
+           } else if (validUntil is String) {
+             validUntilDate = DateTime.tryParse(validUntil) ?? DateTime.now();
+           } else {
+             return false;
+           }
+           return DateTime.now().isBefore(validUntilDate) || DateTime.now().isAtSameMomentAs(validUntilDate);
+         }).length;
+       })
+       .onErrorReturn(0); // Returns 0 if there's an error
+ }
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -619,54 +697,144 @@ class _MyHomePageState extends State<MyHomePage> {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Your exclusive claim to best deals',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
                 ],
               ),
-              Stack(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE5E7FA),
-                      borderRadius: BorderRadius.circular(10.0),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'JD',
-                        style: TextStyle(
-                          color: Color(0xFF5B69E4),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
+              Builder(
+                builder: (BuildContext builderContext) {
+                  // Use a different name for the context
+                  return InkWell(
+                    onTap: () {
+                      // Use the builderContext here
+                      Scaffold.of(builderContext).openEndDrawer();
+                    },
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE5E7FA),
+                            borderRadius: BorderRadius.circular(10.0),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'JD',
+                              style: TextStyle(
+                                color: Color(0xFF5B69E4),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            child: const Text(
+                              '3', // Your notification count
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ),
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 16,
-                        minHeight: 16,
-                      ),
-                      child: const Text(
-                        '3',
-                        style: TextStyle(color: Colors.white, fontSize: 10),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-                ],
+                  );
+                },
               ),
             ],
           ),
         ),
       ),
+      endDrawer: Drawer(
+          // This defines the content that slides in from the right
+          child: ListView(
+            padding: EdgeInsets.zero, // Important to remove default padding
+            children: <Widget>[
+              // You can customize the header of your drawer
+              const DrawerHeader(
+                decoration: BoxDecoration(
+                  color: Color(0xFF5B69E4), // Match your app's primary color
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CircleAvatar(
+                      radius: 30,
+                      backgroundColor: Colors.white,
+                      child: Text(
+                        'JD',
+                        style: TextStyle(
+                          color: Color(0xFF5B69E4),
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      'John Doe', // Placeholder: Replace with actual user name
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      'john.doe@example.com', // Placeholder: Replace with actual user email
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+              // Example ListTiles for navigation
+              ListTile(
+                leading: const Icon(Icons.person),
+                title: const Text('Profile'),
+                onTap: () {
+                  Navigator.pop(context); // Close the drawer
+                  setMessage(
+                     'Coming soon..',
+                  );
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.settings),
+                title: const Text('Settings'),
+                onTap: () {
+                  Navigator.pop(context);
+                  setMessage(
+                     'Coming soon..',
+                  ); // Close the drawer
+                },
+              ),
+              const Divider(), // A visual separator
+              ListTile(
+                leading: const Icon(Icons.logout),
+                title: const Text('Logout'),
+                onTap: () {
+                  Navigator.pop(context); // Close the drawer
+                },
+              ),
+            ],
+          ),
+        ),
+
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -780,25 +948,50 @@ class _MyHomePageState extends State<MyHomePage> {
                             ),
                           ),
                           Expanded(
-                            child: InkWell(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const ExpiringDealsScreen(),
-                                  ),
-                                );
-                                setMessage('Expiring tapped');
-                              },
-                              child: _buildRecommendationCardContent(
-                                color: const Color(0xFFE56060),
-                                icon: Icons.access_time,
-                                dealsCount: 5,
-                                title: 'Expiring',
-                                subtitle: 'Ending today\nDon\'t miss!',
-                              ),
-                            ),
+                           child: InkWell(
+                             onTap: () {
+                               Navigator.push(
+                                 context,
+                                 MaterialPageRoute(
+                                   builder: (context) =>
+                                       const ExpiringDealsScreen(),
+                                 ),
+                               );
+                               Fluttertoast.showToast(msg: 'Expiring tapped');
+                             },
+                             child: StreamBuilder<int>(
+                               stream: _thisWeekExpiringDealsCountStream,
+                               builder: (context, snapshot) {
+                                 int dealsCount = 0;
+
+                                 if (snapshot.connectionState == ConnectionState.active) {
+                                   if (snapshot.hasData) {
+                                     dealsCount = snapshot.data!;
+                                   } else if (snapshot.hasError) {
+                                     debugPrint(
+                                       'Error fetching expiring deals count: ${snapshot.error}',
+                                     );
+                                     dealsCount = 0;
+                                   }
+                                 } else if (snapshot.connectionState == ConnectionState.waiting) {
+                                   dealsCount = 0;
+                                 }
+
+                                 // Change subtitle if no expiring deals
+                                 final String subtitle = dealsCount == 0
+                                     ? 'No expiring deals this week'
+                                     : 'Ending this \nweek!';
+
+                                 return _buildRecommendationCardContent(
+                                   color: const Color(0xFFE56060),
+                                   icon: Icons.access_time,
+                                   dealsCount: dealsCount,
+                                   title: 'Expiring',
+                                   subtitle: subtitle,
+                                 );
+                               },
+                             ),
+                           ),
                           ),
                         ],
                       ),
@@ -893,6 +1086,8 @@ class _MyHomePageState extends State<MyHomePage> {
                       discountDetails: deal.discountDetails,
                       distance: deal.distance,
                       availability: deal.availability,
+                      termsAndConditions: deal.termsAndConditions ?? 'No terms and conditions available.', 
+                      eligibleCards: deal.eligibleCards,
                     );
                   }).toList(),
                 );
@@ -1019,6 +1214,9 @@ class NewDealCard extends StatelessWidget {
   final String discountDetails;
   final String? distance;
   final String? availability;
+  final String? termsAndConditions;
+  final List<String>? eligibleCards;
+  
 
   const NewDealCard({
     super.key,
@@ -1032,7 +1230,152 @@ class NewDealCard extends StatelessWidget {
     required this.discountDetails,
     this.distance,
     this.availability,
+    this.termsAndConditions,
+    this.eligibleCards,  
   });
+
+  void _showDealDetailsModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      builder: (BuildContext context) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Icon(merchantIcon, size: 32, color: Colors.grey[700]),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        merchantName,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF5B69E4),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  description,
+                  style: const TextStyle(fontSize: 16, color: Colors.black87),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Valid until: $validUntil',
+                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: rightTagColor,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        rightTagText,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        categoryText,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey[700],
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Discount: $discountDetails',
+                  style: const TextStyle(fontSize: 14, color: Colors.green),
+                ),
+                if (availability != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Availability: $availability',
+                    style: const TextStyle(fontSize: 14, color: Colors.blue),
+                  ),
+                ],
+                if (distance != null) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    'Distance: $distance',
+                    style: const TextStyle(fontSize: 14, color: Colors.deepOrange),
+                  ),
+                ],
+                if (eligibleCards != null && eligibleCards!.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Eligible Cards:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  const SizedBox(height: 4),
+                  Wrap(
+                    spacing: 8,
+                    children: eligibleCards!
+                        .map((card) => Chip(
+                              label: Text(card),
+                              backgroundColor: Colors.blue[50],
+                            ))
+                        .toList(),
+                  ),
+                ],
+                if (termsAndConditions != null && termsAndConditions!.isNotEmpty) ...[
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Terms & Conditions:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    termsAndConditions!,
+                    style: const TextStyle(fontSize: 13, color: Colors.black87),
+                  ),
+                ],
+                const SizedBox(height: 20),
+                Align(
+                  alignment: Alignment.bottomRight,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1203,11 +1546,7 @@ class NewDealCard extends StatelessWidget {
                   ],
                 ),
                 ElevatedButton(
-                  onPressed: () {
-                    Fluttertoast.showToast(
-                      msg: "Viewing details for $merchantName deal",
-                    );
-                  },
+                  onPressed: () => _showDealDetailsModal(context),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFF5B69E4),
                     foregroundColor: Colors.white,

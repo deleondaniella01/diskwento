@@ -209,6 +209,26 @@ class _ExpiringDealsScreenState extends State<ExpiringDealsScreen> {
 
               IconData merchantIcon = getMerchantIcon(merchantId);
 
+              // Add this condition: skip expired deals
+              if (DateTime.now().isAfter(validUntil.toDate())) {
+                return const SizedBox.shrink();
+              }
+
+              // Calculate days until expiration
+              final now = DateTime.now();
+              final expiryDate = validUntil.toDate();
+              final int daysLeft = expiryDate.difference(now).inDays;
+
+              // If the deal expires today, show "Expiring today"
+              String expiringText;
+              if (daysLeft < 1) {
+                expiringText = "Expiring today";
+              } else if (daysLeft == 1) {
+                expiringText = "Expiring in 1 day";
+              } else {
+                expiringText = "Expiring in $daysLeft days";
+              }
+
               return Card(
                 margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 elevation: 2.0,
@@ -248,34 +268,87 @@ class _ExpiringDealsScreenState extends State<ExpiringDealsScreen> {
                                   mainAxisAlignment:
                                       MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Text(
-                                      merchantName,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: Color(0xFF323B60),
-                                      ),
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          merchantName,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF323B60),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Row(
+                                          children: [
+                                            // Categories field
+                                            if (deal['categories'] != null &&
+                                                deal['categories']
+                                                    .toString()
+                                                    .isNotEmpty)
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 2),
+                                                margin: const EdgeInsets.only(
+                                                    right: 6),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.grey[200],
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  deal['categories'],
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    color: Colors.grey,
+                                                    fontWeight:
+                                                        FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ),
+                                            // BDO field
+                                            if (deal['bank'] != null &&
+                                                deal['bank'].toString().isNotEmpty)
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 2),
+                                                decoration: BoxDecoration(
+                                                  color: const Color(0xFF5B69E4),
+                                                  borderRadius:
+                                                      BorderRadius.circular(4),
+                                                ),
+                                                child: Text(
+                                                  deal['bank'],
+                                                  style: const TextStyle(
+                                                    fontSize: 10,
+                                                    color: Colors.white,
+                                                    fontWeight:
+                                                        FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
+                                    // Expiring text container (right side)
                                     Container(
                                       padding: const EdgeInsets.symmetric(
                                         horizontal: 8.0,
                                         vertical: 4.0,
                                       ),
                                       decoration: BoxDecoration(
-                                        color: rightTagColor,
-                                        borderRadius: BorderRadius.circular(
-                                          8.0,
-                                        ),
                                       ),
                                       child: Text(
-                                        rightTagText,
+                                        expiringText,
                                         style: const TextStyle(
-                                          color: Color.fromARGB(
-                                            255,
-                                            255,
-                                            255,
-                                            255,
-                                          ),
+                                          color: Color.fromARGB(255, 225, 65, 65),
                                           fontSize: 11,
                                           fontWeight: FontWeight.bold,
                                         ),
@@ -299,7 +372,7 @@ class _ExpiringDealsScreenState extends State<ExpiringDealsScreen> {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 8),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
