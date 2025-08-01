@@ -598,6 +598,62 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     );
   }
 
+  Stream<int> _getThisWeekExpiringDealsCountStream() {
+   final now = DateTime.now();
+
+
+   // Calculate the start of the current week (Monday at 00:00:00)
+   // Dart's weekday: Monday is 1, Sunday is 7.
+   final startOfWeek = DateTime(
+     now.year,
+     now.month,
+     now.day,
+   ).subtract(Duration(days: now.weekday - 1));
+
+
+   // Calculate the end of the current week (Sunday at 23:59:59.999)
+   final endOfWeek =
+       DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day).add(
+         const Duration(
+           days: 6,
+           hours: 23,
+           minutes: 59,
+           seconds: 59,
+           milliseconds: 999,
+         ),
+       );
+
+
+   return _dealsCollection
+       .where(
+         'valid_until',
+         isGreaterThanOrEqualTo: Timestamp.fromDate(startOfWeek),
+       )
+       .where(
+         'valid_until',
+         isLessThanOrEqualTo: Timestamp.fromDate(endOfWeek),
+       )
+       .snapshots()
+       .map((snapshot) {
+         // Only count deals where valid_until is still in the future
+         return snapshot.docs.where((doc) {
+           final data = doc.data();
+           final validUntil = data['valid_until'];
+           DateTime validUntilDate;
+           if (validUntil is Timestamp) {
+             validUntilDate = validUntil.toDate();
+           } else if (validUntil is String) {
+             validUntilDate = DateTime.tryParse(validUntil) ?? DateTime.now();
+           } else {
+             return false;
+           }
+           return DateTime.now().isBefore(validUntilDate) || DateTime.now().isAtSameMomentAs(validUntilDate);
+         }).length;
+       })
+       .onErrorReturn(0); // Returns 0 if there's an error
+ }
+
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -636,43 +692,65 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'Your exclusive claim to best deals',
+                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                      ),
+                    ],
+                  ),
                 ],
               ),
-              Stack(
-                children: [
-                  Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE5E7FA),
-                      borderRadius: BorderRadius.circular(10.0),
+              Builder(
+                builder: (BuildContext builderContext) {
+                  // Use a different name for the context
+                  return InkWell(
+                    onTap: () {
+                      // Use the builderContext here
+                      Scaffold.of(builderContext).openEndDrawer();
+                    },
+                    child: Stack(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE5E7FA),
+                            borderRadius: BorderRadius.circular(10.0),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'JD',
+                              style: TextStyle(
+                                color: Color(0xFF5B69E4),
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          right: 0,
+                          top: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(3),
+                            child: const Text(
+                              '3', // Your notification count
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    child: Center(
-                      // Changed from const Center to Center
-                      child: Image.asset('assets/dibs.png'),
-                    ),
-                  ),
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: BoxDecoration(
-                        color: Colors.red,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      constraints: const BoxConstraints(
-                        minWidth: 16,
-                        minHeight: 16,
-                      ),
-                      child: const Text(
-                        '3',
-                        style: TextStyle(color: Colors.white, fontSize: 10),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ),
-                ],
+                  );
+                },
               ),
               IconButton(
                 icon: const Icon(Icons.logout, color: Colors.red),
