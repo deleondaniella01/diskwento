@@ -19,8 +19,8 @@ class _PersonalizedDealsScreenState extends State<PersonalizedDealsScreen> {
 
   List<String> _selectedBanks = [];
   List<String> _selectedCategories = [];
-  List<String> _availableBanks = ['BDO', 'Metrobank', 'BPI', 'RCBC', 'EastWest']; // Example list
-  List<String> _availableCategories = ['Food & Dining', 'Electronics', 'Travel', 'Fashion', 'Health & Beauty', 'Groceries']; // Example list
+  final List<String> _availableBanks = ['BDO', 'Metrobank', 'BPI', 'RCBC', 'EastWest']; // Example list
+  final List<String> _availableCategories = ['Food & Dining', 'Electronics', 'Travel', 'Fashion', 'Health & Beauty', 'Groceries']; // Example list
 
   List<Map<String, dynamic>> _personalizedDeals = [];
   bool _isLoading = false;
