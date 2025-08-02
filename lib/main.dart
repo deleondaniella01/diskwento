@@ -998,62 +998,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
         .onErrorReturn(0);
   }
 
-  Stream<int> _getThisWeekExpiringDealsCountStream() {
-   final now = DateTime.now();
-
-
-   // Calculate the start of the current week (Monday at 00:00:00)
-   // Dart's weekday: Monday is 1, Sunday is 7.
-   final startOfWeek = DateTime(
-     now.year,
-     now.month,
-     now.day,
-   ).subtract(Duration(days: now.weekday - 1));
-
-
-   // Calculate the end of the current week (Sunday at 23:59:59.999)
-   final endOfWeek =
-       DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day).add(
-         const Duration(
-           days: 6,
-           hours: 23,
-           minutes: 59,
-           seconds: 59,
-           milliseconds: 999,
-         ),
-       );
-
-
-   return _dealsCollection
-       .where(
-         'valid_until',
-         isGreaterThanOrEqualTo: Timestamp.fromDate(startOfWeek),
-       )
-       .where(
-         'valid_until',
-         isLessThanOrEqualTo: Timestamp.fromDate(endOfWeek),
-       )
-       .snapshots()
-       .map((snapshot) {
-         // Only count deals where valid_until is still in the future
-         return snapshot.docs.where((doc) {
-           final data = doc.data();
-           final validUntil = data['valid_until'];
-           DateTime validUntilDate;
-           if (validUntil is Timestamp) {
-             validUntilDate = validUntil.toDate();
-           } else if (validUntil is String) {
-             validUntilDate = DateTime.tryParse(validUntil) ?? DateTime.now();
-           } else {
-             return false;
-           }
-           return DateTime.now().isBefore(validUntilDate) || DateTime.now().isAtSameMomentAs(validUntilDate);
-         }).length;
-       })
-       .onErrorReturn(0); // Returns 0 if there's an error
- }
-
-
+  // Method to log out the user
   void _logout() async {
     await FirebaseAuth.instance.signOut();
     Navigator.pushAndRemoveUntil(
