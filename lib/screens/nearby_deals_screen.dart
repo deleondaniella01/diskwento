@@ -219,6 +219,25 @@ class _NearbyDealsScreenState extends State<NearbyDealsScreen> {
       }).toList();
     }
 
+    // Filter deals by distance 
+    if (widget.userLocation.latitude != null && widget.userLocation.longitude != null) {
+      deals = deals.where((doc) {
+        try {
+          final GeoPoint geoPoint = _extractGeoPointFromDoc(doc);
+          final double distance = Geolocator.distanceBetween(
+            widget.userLocation.latitude!,
+            widget.userLocation.longitude!,
+            geoPoint.latitude,
+            geoPoint.longitude,
+          );
+          return distance <= 10000; // proximity within the customer's current location
+        } catch (e) {
+          // If geopoint is missing or invalid, exclude the deal
+          return false;
+        }
+      }).toList();
+    }
+
     return deals;
   }
 

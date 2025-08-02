@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import 'package:firebase_analytics/firebase_analytics.dart';
+// If using older analytics
 import 'package:firebase_core/firebase_core.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,6 +10,8 @@ import 'package:intl/intl.dart';
 import 'package:location/location.dart' as loc;
 import 'package:geoflutterfire_plus/geoflutterfire_plus.dart'; // Import geoflutterfire_plus
 import 'package:geolocator/geolocator.dart';
+import 'package:myapp/screens/login.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import 'firebase_options.dart';
 import 'screens/nearby_deals_screen.dart';
@@ -19,14 +22,20 @@ import 'package:geocoding/geocoding.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  if (Firebase.apps.isEmpty) {
+    await Firebase.initializeApp(
+      name: 'Dibs App',
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  }
 
-  FirebaseAnalytics analytics = FirebaseAnalytics.instance;
-  FirebaseAnalyticsObserver observer = FirebaseAnalyticsObserver(
+  final analytics = FirebaseAnalytics.instance;
+  final observer = FirebaseAnalyticsObserver(analytics: analytics);
+
+  runApp(MyApp(
     analytics: analytics,
-  );
-
-  runApp(MyApp(analytics: analytics, observer: observer));
+    observer: observer,
+  ));
 }
 
 class MyApp extends StatelessWidget {
@@ -44,7 +53,11 @@ class MyApp extends StatelessWidget {
         useMaterial3: true,
       ),
       navigatorObservers: [observer],
-      home: MyHomePage(title: 'Dibs', analytics: analytics, observer: observer),
+      home: AuthPage(
+        title: 'Dibs',
+        analytics: analytics,
+        observer: observer,
+      ),
     );
   }
 }
@@ -351,7 +364,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
         _currentLocation = locationData;
         _locationStatus = 'Location retrieved!';
         // Update the nearby deals stream when location is available
-        _nearbyDealsCountStream = _getNearbyDealsCountStream(_currentLocation!);
+        _nearbyDealsCountStream = _getNearbyDealsCountStream(_currentLocation);
       });
 
       // Perform reverse geocoding
@@ -399,123 +412,28 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
     }
   }
 
-  Stream<int> _getNearbyDealsCountStream(loc.LocationData userLocation) {
-    if (userLocation.latitude == null || userLocation.longitude == null) {
-      debugPrint(
-        '_getNearbyDealsCountStream: User location is null or invalid, returning 0 nearby deals.',
-      );
-      return Stream.value(0);
+  Stream<int> _getNearbyDealsCountStream(loc.LocationData? userLocation) async* {
+    if (userLocation == null || userLocation.latitude == null || userLocation.longitude == null) {
+      yield 0;
+      return;
     }
-
-    final GeoFirePoint center = GeoFirePoint(
-      GeoPoint(userLocation.latitude!, userLocation.longitude!),
-    );
-    debugPrint(
-      '_getNearbyDealsCountStream: GeoFirePoint Center: Lat: ${center.geopoint.latitude}, Lon: ${center.geopoint.longitude}',
-    );
-
-    const double radiusValue = 50; // In kilometers
-    const String geoPointFieldName = 'merchant_geopoint';
-
-    return _geoDealsCollection
-        .subscribeWithin(
-          center: center,
-          radiusInKm: radiusValue,
-          field: geoPointFieldName,
-          strictMode: false,
-          geopointFrom: (data) {
-            final dynamic rawGeopoint = data[geoPointFieldName];
-            final String docId = data['id'] ?? 'unknown';
-            if (rawGeopoint is GeoPoint) {
-              debugPrint(
-                'geopointFrom: Found native GeoPoint: ${rawGeopoint.latitude}, ${rawGeopoint.longitude} for doc ID: $docId',
-              );
-              return rawGeopoint;
-            } else if (rawGeopoint is Map<String, dynamic>) {
-              final double? latitude = (rawGeopoint['latitude'] is num)
-                  ? (rawGeopoint['latitude'] as num).toDouble()
-                  : null;
-              final double? longitude = (rawGeopoint['longitude'] is num)
-                  ? (rawGeopoint['longitude'] as num).toDouble()
-                  : null;
-              if (latitude != null && longitude != null) {
-                debugPrint(
-                  'geopointFrom: Found map GeoPoint: $latitude, $longitude for doc ID: $docId',
-                );
-                return GeoPoint(latitude, longitude);
-              } else {
-                debugPrint(
-                  'geopointFrom: Failed to parse lat/lon from map for doc ID: $docId. Invalid numbers or keys.',
-                );
-              }
-            } else if (rawGeopoint is String) {
-              // Parse the string format "[lat° N, lon° E]"
-              final RegExp regex = RegExp(
-                r'\[(-?\d+\.?\d*)° N, (-?\d+\.?\d*)° E\]',
-              );
-              final Match? match = regex.firstMatch(rawGeopoint);
-              if (match != null && match.groupCount == 2) {
-                final double? latitude = double.tryParse(match.group(1)!);
-                final double? longitude = double.tryParse(match.group(2)!);
-                if (latitude != null && longitude != null) {
-                  debugPrint(
-                    'geopointFrom: Parsed string GeoPoint: $latitude, $longitude for doc ID: $docId',
-                  );
-                  return GeoPoint(latitude, longitude);
-                } else {
-                  debugPrint(
-                    'geopointFrom: Failed to parse lat/lon from string: "$rawGeopoint" for doc ID: $docId. Invalid numbers.',
-                  );
-                }
-              } else {
-                debugPrint(
-                  'geopointFrom: String format not recognized: "$rawGeopoint" for doc ID: $docId. Regex failed.',
-                );
-              }
-            }
-            debugPrint(
-              'geopointFrom: No valid GeoPoint extracted from: "$rawGeopoint" for doc ID: $docId. Returning GeoPoint(0, 0).',
-            );
-            return GeoPoint(0, 0); // Fallback to a dummy GeoPoint
-          },
-        )
-        .map((snapshotList) {
-          debugPrint(
-            'Fetched ${snapshotList.length} raw documents within bounding box (before client-side distance filter).',
-          );
-          int actualCount = 0;
-          for (var doc in snapshotList) {
-            final GeoPoint? dealGeoPoint = _extractGeoPointFromDoc(
-              doc.data(),
-              geoPointFieldName,
-            );
-            if (dealGeoPoint != null &&
-                (dealGeoPoint.latitude != 0 || dealGeoPoint.longitude != 0)) {
-              // Only process if not the dummy (0,0) point
-              final double distance = Geolocator.distanceBetween(
-                dealGeoPoint.latitude,
-                dealGeoPoint.longitude,
-                center.geopoint.latitude,
-                center.geopoint.longitude,
-              );
-              debugPrint(
-                'Deal ID: ${doc.id}, Distance: ${distance.toStringAsFixed(2)} km, Title: ${doc.data()?['title']}',
-              );
-              if (distance <= radiusValue) {
-                actualCount++;
-              }
-            } else {
-              debugPrint(
-                'Could not extract valid GeoPoint for document ID: ${doc.id} or it was (0,0). Skipping.',
-              );
-            }
-          }
-          debugPrint(
-            'Final count of nearby deals after client-side filter: $actualCount',
-          );
-          return actualCount;
-        })
-        .onErrorReturn(0);
+    final QuerySnapshot snapshot = await FirebaseFirestore.instance
+        .collection('deals')
+        .get();
+    final List<DocumentSnapshot> deals = snapshot.docs.where((doc) {
+      final data = (doc as DocumentSnapshot<Map<String, dynamic>>).data();
+      if (data == null || !data.containsKey('geopoint')) return false;
+      final geo = data['geopoint'];
+      if (geo is! GeoPoint) return false;
+      final double distance = Geolocator.distanceBetween(
+        userLocation.latitude!,
+        userLocation.longitude!,
+        geo.latitude,
+        geo.longitude,
+      );
+      return distance <= 10000;
+    }).toList();
+    yield deals.length;
   }
 
   // Helper function to extract GeoPoint for debugging purposes (used in the .map block)
@@ -665,6 +583,21 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
  }
 
 
+  void _logout() async {
+    await FirebaseAuth.instance.signOut();
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AuthPage(
+          title: 'Dibs',
+          analytics: widget.analytics,
+          observer: widget.observer,
+        ),
+      ),
+      (route) => false,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -691,71 +624,60 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                       color: const Color(0xFFE5E7FA),
                       borderRadius: BorderRadius.circular(10.0),
                     ),
+                    child: const Center(
+                      child: Text(
+                        'JD',
+                        style: TextStyle(
+                          color: Color(0xFF5B69E4),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                ],
+              ),
+              Stack(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE5E7FA),
+                      borderRadius: BorderRadius.circular(10.0),
+                    ),
                     child: Center(
                       // Changed from const Center to Center
                       child: Image.asset('assets/dibs.png'),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        'Your exclusive claim to best deals',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                    ],
+                      constraints: const BoxConstraints(
+                        minWidth: 16,
+                        minHeight: 16,
+                      ),
+                      child: const Text(
+                        '3',
+                        style: TextStyle(color: Colors.white, fontSize: 10),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
                   ),
                 ],
               ),
-              Builder(
-                builder: (BuildContext builderContext) {
-                  // Use a different name for the context
-                  return InkWell(
-                    onTap: () {
-                      // Use the builderContext here
-                      Scaffold.of(builderContext).openEndDrawer();
-                    },
-                    child: Stack(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE5E7FA),
-                            borderRadius: BorderRadius.circular(10.0),
-                          ),
-                          child: const Center(
-                            child: Text(
-                              'JD',
-                              style: TextStyle(
-                                color: Color(0xFF5B69E4),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          right: 0,
-                          top: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(3),
-                            child: const Text(
-                              '3', // Your notification count
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                              ),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+              IconButton(
+                icon: const Icon(Icons.logout, color: Colors.red),
+                onPressed: _logout,
+                tooltip: 'Logout',
               ),
             ],
           ),
@@ -878,27 +800,28 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                       ),
                       const SizedBox(height: 16),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          Expanded(
-                            child: InkWell(
-                              onTap: () {
-                                if (_currentLocation != null) {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => NearbyDealsScreen(
-                                        userLocation: _currentLocation!,
-                                      ),
+                          InkWell(
+                            onTap: () {
+                              if (_currentLocation != null) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => NearbyDealsScreen(
+                                      userLocation: _currentLocation!,
                                     ),
-                                  );
-                                } else {
-                                  _checkLocationAndGet();
-                                  setMessage(
-                                    'Getting location for nearby deals...',
-                                  );
-                                }
-                              },
+                                  ),
+                                );
+                              } else {
+                                _checkLocationAndGet();
+                                setMessage(
+                                  'Getting location for nearby deals...',
+                                );
+                              }
+                            },
+                            child: SizedBox(
+                              width: 103.2, // Set your preferred fixed width
                               child: StreamBuilder<int>(
                                 stream: _nearbyDealsCountStream,
                                 builder: (context, snapshot) {
@@ -916,19 +839,20 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                               ),
                             ),
                           ),
-                          Expanded(
-                            child: InkWell(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const NewDealsScreen(),
-                                  ),
-                                );
+                          InkWell(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      const NewDealsScreen(),
+                                ),
+                              );
 
-                                setMessage('This Month Deals tapped');
-                              },
+                              setMessage('This Month Deals tapped');
+                            },
+                            child: SizedBox(
+                              width: 103.2,
                               child: StreamBuilder<int>(
                                 stream: _thisMonthDealsCountStream,
                                 builder: (context, snapshot) {
@@ -941,7 +865,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                                     dealsCount: thisMonthCount,
                                     title:
                                         '${DateFormat('MMM').format(DateTime.now())} Deals',
-                                    subtitle: 'Exclusive deals this month',
+                                    subtitle: 'Exclusive deals',
                                   );
                                 },
                               ),
@@ -1097,14 +1021,21 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _sendAnalyticsEvent,
-        tooltip: 'Add new deal',
-        backgroundColor: const Color(0xFF5B69E4),
-        foregroundColor: Colors.white,
-        shape: const CircleBorder(),
-        elevation: 6,
-        child: const Icon(Icons.add, size: 30),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            heroTag: 'addDealBtn',
+            onPressed: _sendAnalyticsEvent,
+            backgroundColor: const Color(0xFF5B69E4),
+            foregroundColor: Colors.white,
+            shape: const CircleBorder(),
+            elevation: 6,
+            tooltip: 'Add new deal',
+            child: const Icon(Icons.add, size: 30),
+          ),
+        ],
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
