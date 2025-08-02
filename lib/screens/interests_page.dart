@@ -23,14 +23,46 @@ class InterestsPage extends StatefulWidget {
 
 class InterestsPageState extends State<InterestsPage> {
   final List<Map<String, dynamic>> interests = [
-    {'name': 'Food & Dining', 'icon': Icons.fastfood, 'details': 'Restaurants, cafes, delivery'},
-    {'name': 'Electronics', 'icon': Icons.electrical_services, 'details': 'Gadgets, appliances'},
-    {'name': 'Shopping', 'icon': Icons.shopping_bag, 'details': 'Fashion, lifestyle'},
-    {'name': 'Travel', 'icon': Icons.travel_explore, 'details': 'Hotels, flights, tours'},
-    {'name': 'Transportation', 'icon': Icons.directions_car, 'details': 'Grab, taxi, gas'},
-    {'name': 'Health', 'icon': Icons.health_and_safety, 'details': 'Medical, pharmacy'},
-    {'name': 'Groceries', 'icon': Icons.local_grocery_store, 'details': 'Supermarkets, stores'},
-    {'name': 'Entertainment', 'icon': Icons.movie, 'details': 'Movies, games, events'},
+    {
+      'name': 'Food & Dining',
+      'icon': Icons.fastfood,
+      'details': 'Restaurants, cafes, delivery',
+    },
+    {
+      'name': 'Electronics',
+      'icon': Icons.electrical_services,
+      'details': 'Gadgets, appliances',
+    },
+    {
+      'name': 'Shopping',
+      'icon': Icons.shopping_bag,
+      'details': 'Fashion, lifestyle',
+    },
+    {
+      'name': 'Travel',
+      'icon': Icons.travel_explore,
+      'details': 'Hotels, flights, tours',
+    },
+    {
+      'name': 'Transportation',
+      'icon': Icons.directions_car,
+      'details': 'Grab, taxi, gas',
+    },
+    {
+      'name': 'Health',
+      'icon': Icons.health_and_safety,
+      'details': 'Medical, pharmacy',
+    },
+    {
+      'name': 'Groceries',
+      'icon': Icons.local_grocery_store,
+      'details': 'Supermarkets, stores',
+    },
+    {
+      'name': 'Entertainment',
+      'icon': Icons.movie,
+      'details': 'Movies, games, events',
+    },
   ];
 
   final List<String> selectedInterests = [];
@@ -91,10 +123,7 @@ class InterestsPageState extends State<InterestsPage> {
                   const SizedBox(height: 5),
                   const Text(
                     "Let's set up your account to find the best deals",
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: Colors.black54,
-                    ),
+                    style: TextStyle(fontSize: 16, color: Colors.black54),
                   ),
                 ],
               ),
@@ -143,16 +172,19 @@ class InterestsPageState extends State<InterestsPage> {
                         const SizedBox(height: 20),
                         Expanded(
                           child: GridView.builder(
-                            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 2,
-                              crossAxisSpacing: 15,
-                              mainAxisSpacing: 15,
-                              childAspectRatio: 1.3,
-                            ),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 2,
+                                  crossAxisSpacing: 15,
+                                  mainAxisSpacing: 15,
+                                  childAspectRatio: 1.3,
+                                ),
                             itemCount: interests.length,
                             itemBuilder: (context, index) {
                               final interest = interests[index];
-                              final isSelected = selectedInterests.contains(interest['name']);
+                              final isSelected = selectedInterests.contains(
+                                interest['name'],
+                              );
                               return GestureDetector(
                                 onTap: () => _toggleInterest(interest['name']),
                                 child: Container(
@@ -160,25 +192,33 @@ class InterestsPageState extends State<InterestsPage> {
                                     color: Colors.white,
                                     borderRadius: BorderRadius.circular(10),
                                     border: Border.all(
-                                      color: isSelected ? Colors.blueAccent : Colors.grey[300]!,
+                                      color: isSelected
+                                          ? Colors.blueAccent
+                                          : Colors.grey[300]!,
                                       width: isSelected ? 2 : 1,
                                     ),
-                                  ),                                  padding: const EdgeInsets.all(10),
+                                  ),
+                                  padding: const EdgeInsets.all(10),
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Icon(
                                         interest['icon'],
                                         size: 30,
-                                        color: isSelected ? Colors.blueAccent : Colors.black54,
+                                        color: isSelected
+                                            ? Colors.blueAccent
+                                            : Colors.black54,
                                       ),
                                       const SizedBox(height: 5),
                                       Text(
                                         interest['name'],
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
-                                          color: isSelected ? Colors.blueAccent : Colors.black87,
+                                          color: isSelected
+                                              ? Colors.blueAccent
+                                              : Colors.black87,
                                         ),
                                         maxLines: 2,
                                         overflow: TextOverflow.ellipsis,
@@ -208,15 +248,20 @@ class InterestsPageState extends State<InterestsPage> {
                             TextButton(
                               onPressed: () {
                                 // TODO: Implement navigation back
-                                 Navigator.pop(context);
+                                Navigator.pop(context);
                               },
                               child: const Text('Back'),
                             ),
                             ElevatedButton(
                               onPressed: selectedInterests.isNotEmpty
                                   ? () async {
-                                      final prefs = await SharedPreferences.getInstance();
+                                      final prefs =
+                                          await SharedPreferences.getInstance();
                                       await prefs.setBool('interestsSet', true);
+                                      await prefs.setStringList(
+                                        'selectedInterests',
+                                        selectedInterests,
+                                      );
 
                                       Navigator.pushReplacement(
                                         context,
@@ -233,7 +278,10 @@ class InterestsPageState extends State<InterestsPage> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: const Color(0xFF29B6F6),
                                 foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 30,
+                                  vertical: 15,
+                                ),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(10),
                                 ),

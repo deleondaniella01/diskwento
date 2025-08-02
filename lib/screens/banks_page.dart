@@ -1,6 +1,8 @@
 import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'interests_page.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 
 class BanksPage extends StatefulWidget {
   final String title;
@@ -18,189 +20,295 @@ class BanksPage extends StatefulWidget {
   _BanksPageState createState() => _BanksPageState();
 }
 
+void setupStorage() {
+  // Get the default Firebase Storage instance.
+  final storage = FirebaseStorage.instance;
+}
+
 class _BanksPageState extends State<BanksPage> {
   List<String> _selectedBanks = [];
 
   final List<Map<String, dynamic>> banks = [
-    {
-      'name': 'Bank of the Philippine Islands',
-      'details': 'Credit & Debit Cards',
-      'icon': 'assets/bpi_logo.png' // Assuming you have bank logos in assets
-    },
-    {
-      'name': 'Banco de Oro',
-      'details': 'Credit & Debit Cards',
-      'icon': 'assets/bdo_logo.png'
-    },
+    {'name': 'BPI', 'details': 'Credit & Debit Cards', 'key': 'bpi'},
+    {'name': 'BDO', 'details': 'Credit & Debit Cards', 'key': 'bdo'},
     {
       'name': 'UnionBank',
       'details': 'Credit & Debit Cards',
-      'icon': 'assets/unionbank_logo.png'
+      'key': 'unionbank',
     },
     {
       'name': 'Metrobank',
       'details': 'Credit & Debit Cards',
-      'icon': 'assets/metrobank_logo.png'
+      'key': 'metrobank',
     },
     {
       'name': 'Security Bank',
       'details': 'Credit & Debit Cards',
-      'icon': 'assets/securitybank_logo.png'
+      'key': 'securitybank',
     },
-    {
-      'name': 'RCBC',
-      'details': 'Credit & Debit Cards',
-      'icon': 'assets/rcbc_logo.png'
-    },
+    {'name': 'RCBC', 'details': 'Credit & Debit Cards', 'key': 'rcbc'},
   ];
+
+  void _toggleBank(String bankName) {
+    setState(() {
+      if (_selectedBanks.contains(bankName)) {
+        _selectedBanks.remove(bankName);
+      } else {
+        _selectedBanks.add(bankName);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Welcome to Dibs!'),
-        centerTitle: true,
-      ),
-      body: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Color(0xFFB3E5FC), // Light blue
+              Color(0xFFE1F5FE), // Lighter blue
+            ],
+          ),
+        ),
+        child: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                "Let's set up your account to find the best deals",
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16),
-              ),
               const SizedBox(height: 20),
+              // Header
+              Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.credit_card,
+                      size: 50,
+                      color: Colors.blueAccent,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    'Welcome to Dibs!',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0277BD),
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  const Text(
+                    "Let's set up your account to find the best deals",
+                    style: TextStyle(fontSize: 16, color: Colors.black54),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 30),
+              // Progress Indicator
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: List.generate(3, (index) {
                   return Container(
                     margin: const EdgeInsets.symmetric(horizontal: 5),
-                    padding: const EdgeInsets.all(8),
+                    width: 30,
+                    height: 8,
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
                       color: index == 0 ? Colors.blueAccent : Colors.grey[300],
-                    ),
-                    child: Text(
-                      (index + 1).toString(),
-                      style: TextStyle(
-                        color: index == 0 ? Colors.white : Colors.black87,
-                      ),
+                      borderRadius: BorderRadius.circular(4),
                     ),
                   );
                 }),
               ),
-              const SizedBox(height: 40),
-              Card(
-                elevation: 2.0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10.0),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(20.0),
-                  child: SingleChildScrollView(
+              const SizedBox(height: 30),
+              Expanded(
+                // This Expanded widget is key
+                child: Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 20),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  elevation: 8,
+                  child: Padding(
+                    padding: const EdgeInsets.all(20.0),
+                    // Removed SingleChildScrollView here
                     child: Column(
+                      // Use Column directly if it's the only child
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Add Your First Card',
+                          'Add Your Preferred Card',
                           style: TextStyle(
-                            fontSize: 18,
+                            fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
                         const SizedBox(height: 10),
                         const Text(
                           'Select at least one card to start discovering personalized deals',
-                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                          style: TextStyle(color: Colors.grey),
                         ),
                         const SizedBox(height: 20),
-                        ListView.builder(
+                        // Flexible( // Wrap GridView.builder in Flexible
+                        GridView.builder(
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 2,
+                                crossAxisSpacing: 15,
+                                mainAxisSpacing: 15,
+                                childAspectRatio: 2.0,
+                              ),
                           itemCount: banks.length,
                           itemBuilder: (context, index) {
                             final bank = banks[index];
-                            final isSelected = _selectedBanks.contains(bank['name']);
-                            return CheckboxListTile(
-                              title: Row(
-                                children: [
-                                  Container(
-                                    width: 30,
-                                    height: 30,
-                                    color: Colors.grey, // Placeholder
-                                    // child: Image.asset(bank['icon']),
+                            final isSelected = _selectedBanks.contains(
+                              bank['name'],
+                            );
+                            return GestureDetector(
+                              onTap: () => _toggleBank(bank['name']),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? Colors.blueAccent
+                                        : Colors.grey[300]!,
+                                    width: isSelected ? 2 : 1,
                                   ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          bank['name'],
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
+                                ),
+                                padding: const EdgeInsets.all(10),
+                                child: Row(
+                                  children: [
+                                    FutureBuilder<String>(
+                                      future: bank['key'] != null
+                                          ? getBankIconUrl(bank['key'])
+                                          : Future.value(null),
+                                      builder: (context, snapshot) {
+                                        if (snapshot.connectionState ==
+                                            ConnectionState.waiting) {
+                                          return const SizedBox(
+                                            width: 30,
+                                            height: 30,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          );
+                                        }
+                                        if (snapshot.hasError ||
+                                            !snapshot.hasData ||
+                                            snapshot.data == null) {
+                                          return const Icon(
+                                            Icons.credit_card,
+                                            size: 32,
+                                            color: Colors.grey,
+                                          );
+                                        }
+                                        return Container(
+                                          width: 30,
+                                          height: 30,
+                                          margin: const EdgeInsets.only(
+                                            right: 10,
                                           ),
-                                        ),
-                                        Text(
-                                          bank['details'],
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: Colors.grey[600],
+                                          child: Image.network(
+                                            snapshot.data!,
+                                            fit: BoxFit.contain,
                                           ),
-                                        ),
-                                      ],
+                                        );
+                                      },
                                     ),
-                                  ),
-                                ],
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Text(
+                                            bank['name'],
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: isSelected
+                                                  ? Colors.blueAccent
+                                                  : Colors.black87,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                          Text(
+                                            bank['details'],
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.grey[600],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                              value: isSelected,
-                              onChanged: (checked) {
-                                setState(() {
-                                  if (checked == true) {
-                                    _selectedBanks.add(bank['name']);
-                                  } else {
-                                    _selectedBanks.remove(bank['name']);
-                                  }
-                                });
-                              },
-                              controlAffinity: ListTileControlAffinity.leading,
                             );
                           },
+                        ),
+                        // ),
+                        const SizedBox(height: 20),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            TextButton(
+                              onPressed: () {
+                                Navigator.pop(context);
+                              },
+                              child: const Text('Back'),
+                            ),
+                            ElevatedButton(
+                              onPressed: _selectedBanks.isNotEmpty
+                                  ? () async {
+                                      final prefs =
+                                          await SharedPreferences.getInstance();
+                                      await prefs.setStringList(
+                                        'selectedBanks',
+                                        _selectedBanks,
+                                      );
+
+                                      Navigator.pushReplacement(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) => InterestsPage(
+                                            title: 'Dibs',
+                                            analytics: widget.analytics,
+                                            observer: widget.observer,
+                                          ),
+                                        ),
+                                      );
+                                    }
+                                  : null,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF29B6F6),
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 30,
+                                  vertical: 15,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                              ),
+                              child: const Text('Continue'),
+                            ),
+                          ],
                         ),
                       ],
                     ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _selectedBanks.isNotEmpty
-                    ? () {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => InterestsPage(
-                              title: 'Dibs',
-                              analytics: widget.analytics,
-                              observer: widget.observer,
-                            ),
-                          ),
-                        );
-                      }
-                    : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF29B6F6),
-                  padding: const EdgeInsets.symmetric(vertical: 15),
-                  textStyle: const TextStyle(fontSize: 18),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                ),
-                child: const Text('Continue',
-                    style: TextStyle(color: Colors.white)),
               ),
             ],
           ),
@@ -208,4 +316,22 @@ class _BanksPageState extends State<BanksPage> {
       ),
     );
   }
+}
+
+Future<String> getBankIconUrl(String bankKey) async {
+  final storage = FirebaseStorage.instance;
+  final List<String> extensions = ['png', 'jpg', 'jpeg'];
+
+  for (final ext in extensions) {
+    try {
+      final ref = storage.ref().child('bank/$bankKey.$ext');
+      final url = await ref.getDownloadURL();
+      return url;
+    } catch (e) {
+      print('Error fetching $bankKey.$ext: $e');
+      continue;
+    }
+  }
+  // If none found, throw error
+  throw Exception('No icon found for $bankKey');
 }

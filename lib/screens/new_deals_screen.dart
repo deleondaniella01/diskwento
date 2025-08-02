@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart'; // For date formatting
+import '../widgets/deal_details_modal.dart';
 
 // Helper function to convert hex string to Color object
 Color colorFromHex(String hexColor) {
@@ -59,73 +60,23 @@ class _NewDealsScreenState extends State<NewDealsScreen> {
     BuildContext context,
     String merchantName,
     String dealDescription,
-    String validUntil,
+    String formattedValidUntil,
+    List<String> categories,
+    String bank,
     String termsAndConditions,
     List<String> eligibleCards,
   ) {
     showModalBottomSheet(
       context: context,
       builder: (BuildContext context) {
-        return Container(
-          padding: const EdgeInsets.all(16.0),
-          child: SingleChildScrollView(
-            // Added SingleChildScrollView
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                Text(
-                  merchantName,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF5B69E4),
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  dealDescription,
-                  style: TextStyle(fontSize: 16, color: Colors.grey[800]),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  'Valid until: $validUntil',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[600]),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'Terms and Conditions:',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  termsAndConditions, // Display terms and conditions
-                  style: TextStyle(fontSize: 14, color: Colors.grey[800]),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'Eligible Cards:',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 5),
-                // Display eligible cards as a list
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: eligibleCards
-                      .map((card) => Text('- $card'))
-                      .toList(),
-                ),
-                const SizedBox(height: 20),
-                Align(
-                  alignment: Alignment.bottomRight,
-                  child: TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Close'),
-                  ),
-                ),
-              ],
-            ),
-          ),
+        return DealDetailsModal(
+          title: merchantName,
+          description: dealDescription,
+          categories: categories,
+          bank: bank,
+          termsAndConditions: termsAndConditions,
+          eligibleCards: eligibleCards,
+          validUntil: formattedValidUntil,
         );
       },
     );
@@ -136,8 +87,7 @@ class _NewDealsScreenState extends State<NewDealsScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Deals for this Month'),
-        backgroundColor: const Color(0xFF4CAF50),
-        foregroundColor: Colors.white,
+        foregroundColor: Colors.black,
       ),
       body: StreamBuilder<QuerySnapshot>(
         // Querying for deals where 'valid_until' falls within the current month
@@ -251,42 +201,68 @@ class _NewDealsScreenState extends State<NewDealsScreen> {
                                         color: Color(0xFF323B60),
                                       ),
                                     ),
-                                    Container(
-                                      // Added Container for the bank tag
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8.0,
-                                        vertical: 4.0,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            rightTagColor, // Use the determined tag color
-                                        borderRadius: BorderRadius.circular(
-                                          8.0,
-                                        ),
-                                      ),
-                                      child: Text(
-                                        rightTagText, // Use the bank name as tag text
-                                        style: const TextStyle(
-                                          color: Color.fromARGB(
-                                            255,
-                                            255,
-                                            255,
-                                            255,
-                                          ),
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
                                   ],
                                 ),
                                 const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    // Categories field
+                                    if (deal['categories'] != null &&
+                                        deal['categories']
+                                            .toString()
+                                            .isNotEmpty)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        margin: const EdgeInsets.only(right: 6),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey[200],
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          deal['categories'],
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.grey,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    // BDO field
+                                    if (deal['bank'] != null &&
+                                        deal['bank'].toString().isNotEmpty)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 6,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF5B69E4),
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          deal['bank'],
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
                               ],
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 15),
                       Text(
                         dealDescription,
                         style: const TextStyle(
@@ -329,6 +305,16 @@ class _NewDealsScreenState extends State<NewDealsScreen> {
                                 merchantName,
                                 dealDescription,
                                 formattedValidUntil,
+                                (deal['categories'] is List)
+                                    ? List<String>.from(deal['categories'])
+                                    : (deal['categories'] != null
+                                          ? deal['categories']
+                                                .toString()
+                                                .split(',')
+                                                .map((e) => e.trim())
+                                                .toList()
+                                          : <String>[]),
+                                rightTagText,
                                 termsAndConditions,
                                 eligibleCards,
                               );

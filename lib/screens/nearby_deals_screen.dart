@@ -7,9 +7,29 @@ import 'package:flutter/material.dart';
 import 'package:location/location.dart';
 import 'package:geolocator/geolocator.dart'; // Still needed for distance calculation
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:intl/intl.dart'; // Import for DateFormat
+import '../widgets/deal_details_modal.dart';
 
 // Import with alias for firebase_ai
 import 'package:firebase_ai/firebase_ai.dart' as fb_ai;
+
+// Helper function to map merchant_id (or a specific icon field) to IconData
+IconData getMerchantIcon(String merchantId) {
+  switch (merchantId.toLowerCase()) {
+    case 'fastfood':
+      return Icons.fastfood;
+    case 'dining':
+      return Icons.local_dining;
+    case 'shop':
+      return Icons.shopping_bag;
+    case 'travel':
+      return Icons.airplanemode_active;
+    case 'banking':
+      return Icons.account_balance;
+    default:
+      return Icons.store;
+  }
+}
 
 class NearbyDealsScreen extends StatefulWidget {
   final LocationData userLocation;
@@ -21,10 +41,6 @@ class NearbyDealsScreen extends StatefulWidget {
 }
 
 class _NearbyDealsScreenState extends State<NearbyDealsScreen> {
-  // Removed GeoFirePoint center;
-  // Removed CollectionReference _dealsCollection;
-  // Removed GeoCollectionReference _geoDealsCollection;
-
   late final fb_ai.GenerativeModel _generativeModel;
 
   late TextEditingController _searchQueryController;
@@ -36,7 +52,7 @@ class _NearbyDealsScreenState extends State<NearbyDealsScreen> {
 
   final List<String> _banks = ['BDO', 'BPI', 'Metrobank', 'Landbank', 'PNB'];
   final List<String> _categories = [
-    'Food',
+    'Food & Dining',
     'Shopping',
     'Travel',
     'Electronics',
@@ -49,7 +65,6 @@ class _NearbyDealsScreenState extends State<NearbyDealsScreen> {
   @override
   void initState() {
     super.initState();
-    // Removed geo-related initializations
 
     // Initialize the Generative Model using FirebaseAI
     _generativeModel = fb_ai.FirebaseAI.googleAI().generativeModel(
@@ -69,7 +84,6 @@ class _NearbyDealsScreenState extends State<NearbyDealsScreen> {
   }
 
   // Helper method to extract GeoPoint from a DocumentSnapshot
-  // This is still needed for distance calculation display, even if not for geo-filtering.
   GeoPoint _extractGeoPointFromDoc(DocumentSnapshot doc) {
     final Map<String, dynamic>? data =
         (doc as DocumentSnapshot<Map<String, dynamic>>).data();
@@ -206,8 +220,9 @@ class _NearbyDealsScreenState extends State<NearbyDealsScreen> {
         final Map<String, dynamic> dealData =
             (doc as DocumentSnapshot<Map<String, dynamic>>).data()!;
         final String dealTitle = (dealData['title'] ?? '').toLowerCase();
-        final String merchantName = (dealData['merchant'] ?? '').toLowerCase();
-        final String discountDetails = (dealData['details'] ?? '')
+        final String merchantName = (dealData['merchant_name'] ?? '')
+            .toLowerCase();
+        final String discountDetails = (dealData['description'] ?? '')
             .toLowerCase();
 
         return _currentKeywordsList.any(
@@ -219,8 +234,9 @@ class _NearbyDealsScreenState extends State<NearbyDealsScreen> {
       }).toList();
     }
 
-    // Filter deals by distance 
-    if (widget.userLocation.latitude != null && widget.userLocation.longitude != null) {
+    // Filter deals by distance
+    if (widget.userLocation.latitude != null &&
+        widget.userLocation.longitude != null) {
       deals = deals.where((doc) {
         try {
           final GeoPoint geoPoint = _extractGeoPointFromDoc(doc);
@@ -230,7 +246,8 @@ class _NearbyDealsScreenState extends State<NearbyDealsScreen> {
             geoPoint.latitude,
             geoPoint.longitude,
           );
-          return distance <= 10000; // proximity within the customer's current location
+          return distance <=
+              10000; // proximity within the customer's current location
         } catch (e) {
           // If geopoint is missing or invalid, exclude the deal
           return false;
@@ -376,39 +393,39 @@ class _NearbyDealsScreenState extends State<NearbyDealsScreen> {
       ),
       body: Column(
         children: [
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchQueryController,
-                    decoration: InputDecoration(
-                      labelText: 'Search deals by keywords or bank',
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.search),
-                        onPressed: () {
-                          setState(() {
-                            _filteredDealsFuture =
-                                _applyFilters(); // Apply filters on search icon press
-                          });
-                        },
-                      ),
-                      border: OutlineInputBorder(),
-                    ),
-                    onSubmitted: (value) {
-                      setState(() {
-                        _filteredDealsFuture =
-                            _applyFilters(); // Apply filters on keyboard submit
-                      });
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
+          // Padding(
+          //   padding: const EdgeInsets.all(8.0),
+          //   child: Row(
+          //     children: [
+          //       Expanded(
+          //         child: TextField(
+          //           controller: _searchQueryController,
+          //           decoration: InputDecoration(
+          //             labelText: 'Search deals by keywords or bank',
+          //             suffixIcon: IconButton(
+          //               icon: const Icon(Icons.search),
+          //               onPressed: () {
+          //                 setState(() {
+          //                   _filteredDealsFuture =
+          //                       _applyFilters(); // Apply filters on search icon press
+          //                 });
+          //               },
+          //             ),
+          //             border: OutlineInputBorder(),
+          //           ),
+          //           onSubmitted: (value) {
+          //             setState(() {
+          //               _filteredDealsFuture =
+          //                   _applyFilters(); // Apply filters on keyboard submit
+          //             });
+          //           },
+          //         ),
+          //       ), //Expanded
+          //     ],
+          //   ),
+          // ), //Padding
           Expanded(
-            // Use FutureBuilder instead of StreamBuilder
+            // Display Nearby Deals
             child: FutureBuilder<List<DocumentSnapshot>>(
               future: _filteredDealsFuture, // Use the new future
               builder: (context, snapshot) {
@@ -439,8 +456,8 @@ class _NearbyDealsScreenState extends State<NearbyDealsScreen> {
                         (deals[index] as DocumentSnapshot<Map<String, dynamic>>)
                             .data()!;
                     final String dealTitle = deal['title'] ?? 'N/A';
-                    final String merchantName = deal['merchant'] ?? 'N/A';
-                    final String discountDetails = deal['details'] ?? 'N/A';
+                    final String merchantName = deal['merchant_name'] ?? 'N/A';
+                    final String discountDetails = deal['description'] ?? 'N/A';
 
                     // Distance calculation still relevant for display
                     final GeoPoint dealGeoPoint = _extractGeoPointFromDoc(
@@ -455,45 +472,235 @@ class _NearbyDealsScreenState extends State<NearbyDealsScreen> {
                     final String locationText =
                         '${(distance / 1000).toStringAsFixed(2)} km away';
 
+                    // Add this after discountDetails:
+                    final Timestamp? validUntilTimestamp = deal['valid_until'];
+                    String formattedValidUntil = '';
+                    if (validUntilTimestamp != null) {
+                      formattedValidUntil = DateFormat(
+                        'MMM dd, yyyy',
+                      ).format(validUntilTimestamp.toDate());
+                    }
+
                     return Card(
-                      margin: const EdgeInsets.all(8.0),
-                      elevation: 4.0,
+                      margin: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      elevation: 2.0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16.0),
+                      ),
+                      color: Colors.white,
                       child: Padding(
                         padding: const EdgeInsets.all(16.0),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              dealTitle,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF5B69E4),
-                              ),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey[200],
+                                    borderRadius: BorderRadius.circular(12.0),
+                                  ),
+                                  child: Center(
+                                    child: Icon(
+                                      // Use your own logic to get the icon, e.g.:
+                                      getMerchantIcon(
+                                        deal['merchant_id'] ?? '',
+                                      ),
+                                      size: 32,
+                                      color: Colors.grey[700],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Text(
+                                            merchantName,
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: Color(0xFF323B60),
+                                            ),
+                                          ),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8.0,
+                                              vertical: 4.0,
+                                            ),
+                                            child: Text(
+                                              locationText,
+                                              style: const TextStyle(
+                                                color: Colors.green,
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Row(
+                                        children: [
+                                          // Categories field
+                                          if (deal['categories'] != null &&
+                                              deal['categories']
+                                                  .toString()
+                                                  .isNotEmpty)
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                              margin: const EdgeInsets.only(
+                                                right: 6,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: Colors.grey[200],
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                deal['categories'],
+                                                style: const TextStyle(
+                                                  fontSize: 10,
+                                                  color: Colors.black54,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                          // Bank field
+                                          if (deal['bank'] != null &&
+                                              deal['bank']
+                                                  .toString()
+                                                  .isNotEmpty)
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 6,
+                                                    vertical: 2,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFF5B69E4),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                deal['bank'],
+                                                style: const TextStyle(
+                                                  fontSize: 10,
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              merchantName,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                color: Colors.black87,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 15),
                             Text(
                               discountDetails,
                               style: const TextStyle(
-                                fontSize: 14,
-                                color: Colors.green,
+                                fontSize: 13,
+                                color: Colors.black54,
                               ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              locationText,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                              ),
+                            const SizedBox(height: 10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.calendar_today,
+                                      size: 12,
+                                      color: Colors.grey[600],
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Valid until: $formattedValidUntil',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.black54,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                ElevatedButton(
+                                  onPressed: () {
+                                    // Show modal with deal details
+                                    showModalBottomSheet(
+                                      context: context,
+                                      builder: (BuildContext context) {
+                                        final String termsAndConditions =
+                                            deal['terms_and_conditions'] ??
+                                            'No terms and conditions available.';
+                                        final List<String> eligibleCards =
+                                            List<String>.from(
+                                              deal['eligible_cards'] ?? [],
+                                            );
+                                        return DealDetailsModal(
+                                          title: dealTitle,
+                                          description: discountDetails,
+                                          categories:
+                                              (deal['categories'] is List)
+                                              ? List<String>.from(
+                                                  deal['categories'],
+                                                )
+                                              : (deal['categories'] != null
+                                                    ? deal['categories']
+                                                          .toString()
+                                                          .split(',')
+                                                          .map((e) => e.trim())
+                                                          .toList()
+                                                    : <String>[]),
+                                          bank: deal['bank'] ?? '',
+                                          termsAndConditions:
+                                              termsAndConditions,
+                                          eligibleCards: eligibleCards,
+                                          validUntil: formattedValidUntil,
+                                        );
+                                      },
+                                    );
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF5B69E4),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8.0),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 24,
+                                      vertical: 12,
+                                    ),
+                                    elevation: 0,
+                                    textStyle: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  child: const Text('View Deal'),
+                                ),
+                              ],
                             ),
                           ],
                         ),

@@ -40,7 +40,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 // }
 
 class AuthPage extends StatefulWidget {
-  const AuthPage({super.key,
+  const AuthPage({
+    super.key,
     required this.title,
     required this.analytics,
     required this.observer,
@@ -62,10 +63,22 @@ class _AuthPageState extends State<AuthPage> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
+  final TextEditingController _signUpEmailController = TextEditingController();
+  final TextEditingController _signUpPasswordController =
+      TextEditingController();
+  final TextEditingController _signUpConfirmPasswordController =
+      TextEditingController();
+
+  // 1. Add a state variable to track the checkbox:
+  bool _agreedToTnC = false;
+
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _signUpEmailController.dispose();
+    _signUpPasswordController.dispose();
+    _signUpConfirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -76,7 +89,8 @@ class _AuthPageState extends State<AuthPage> {
         // The user canceled the sign-in flow
         return;
       }
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
       final AuthCredential credential = GoogleAuthProvider.credential(
         accessToken: googleAuth.accessToken,
         idToken: googleAuth.idToken,
@@ -134,8 +148,43 @@ class _AuthPageState extends State<AuthPage> {
       }
       // TODO: Show an appropriate error message to the user
     } catch (e) {
-       ('Error signing in: $e');
+      ('Error signing in: $e');
       // TODO: Show an error message to the user
+    }
+  }
+
+  Future<void> _handleSignUp() async {
+    final email = _signUpEmailController.text.trim();
+    final password = _signUpPasswordController.text;
+    final confirmPassword = _signUpConfirmPasswordController.text;
+
+    if (email.isEmpty || password.isEmpty || confirmPassword.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill in all fields.')),
+      );
+      return;
+    }
+    if (password != confirmPassword) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Passwords do not match.')));
+      return;
+    }
+    try {
+      await _auth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      // After successful sign up, go to BanksPage or InterestsPage
+      _navigateToBankPage();
+    } on FirebaseAuthException catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message ?? 'Sign up failed')));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Sign up failed')));
     }
   }
 
@@ -147,14 +196,16 @@ class _AuthPageState extends State<AuthPage> {
   // }
 
   void _navigateToBankPage() {
-     Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => BanksPage(
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => BanksPage(
           title: 'Dibs',
           analytics: widget.analytics,
           observer: widget.observer,
-        )),
-      );
+        ),
+      ),
+    );
   }
 
   // void _navigateToHomePage() {
@@ -193,26 +244,13 @@ class _AuthPageState extends State<AuthPage> {
                 // App Logo Placeholder
                 Container(
                   padding: const EdgeInsets.all(12),
-                  decoration: const BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.check,
-                    size: 50,
-                    color: Colors.blueAccent,
+                  child: SizedBox(
+                    width: 100,
+                    height: 100,
+                    child: Image.asset('assets/dibs.png', fit: BoxFit.contain),
                   ),
                 ),
-                const SizedBox(height: 20),
-                const Text(
-                  'Dibs!',
-                  style: TextStyle(
-                    fontSize: 40,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFF0277BD), // Darker blue
-                  ),
-                ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 1),
                 const Text(
                   'Your exclusive claim to best deals',
                   style: TextStyle(
@@ -220,7 +258,7 @@ class _AuthPageState extends State<AuthPage> {
                     color: Color(0xFF039BE5), // Medium blue
                   ),
                 ),
-                const SizedBox(height: 40),
+                const SizedBox(height: 30),
                 Card(
                   margin: const EdgeInsets.symmetric(horizontal: 20),
                   shape: RoundedRectangleBorder(
@@ -242,12 +280,18 @@ class _AuthPageState extends State<AuthPage> {
                                   });
                                 },
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: isSignIn ? const Color(0xFF29B6F6) : Colors.grey[200],
-                                  foregroundColor: isSignIn ? Colors.white : Colors.black87,
+                                  backgroundColor: isSignIn
+                                      ? const Color(0xFF29B6F6)
+                                      : Colors.grey[200],
+                                  foregroundColor: isSignIn
+                                      ? Colors.white
+                                      : Colors.black87,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  padding: const EdgeInsets.symmetric(vertical: 15),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 15,
+                                  ),
                                 ),
                                 child: const Text('Sign In'),
                               ),
@@ -261,12 +305,18 @@ class _AuthPageState extends State<AuthPage> {
                                   });
                                 },
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: !isSignIn ? const Color(0xFF29B6F6) : Colors.grey[200],
-                                  foregroundColor: !isSignIn ? Colors.white : Colors.black87,
+                                  backgroundColor: !isSignIn
+                                      ? const Color(0xFF29B6F6)
+                                      : Colors.grey[200],
+                                  foregroundColor: !isSignIn
+                                      ? Colors.white
+                                      : Colors.black87,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(10),
                                   ),
-                                  padding: const EdgeInsets.symmetric(vertical: 15),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 15,
+                                  ),
                                 ),
                                 child: const Text('Sign Up'),
                               ),
@@ -286,7 +336,8 @@ class _AuthPageState extends State<AuthPage> {
                         ),
                         const SizedBox(height: 10),
                         OutlinedButton(
-                          onPressed: _handleGoogleSignIn, // Call the Google Sign-In function
+                          onPressed:
+                              _handleGoogleSignIn, // Call the Google Sign-In function
                           style: OutlinedButton.styleFrom(
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             side: const BorderSide(color: Colors.grey),
@@ -403,24 +454,11 @@ class _AuthPageState extends State<AuthPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
-        const Text('Full Name'),
-        const SizedBox(height: 8),
-        TextField(
-          decoration: InputDecoration(
-            hintText: 'Enter your full name',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide.none,
-            ),
-            fillColor: Colors.grey[200],
-            filled: true,
-          ),
-          keyboardType: TextInputType.name,
-        ),
         const SizedBox(height: 15),
         const Text('Email'),
         const SizedBox(height: 8),
         TextField(
+          controller: _signUpEmailController,
           decoration: InputDecoration(
             hintText: 'Enter your email',
             border: OutlineInputBorder(
@@ -436,6 +474,7 @@ class _AuthPageState extends State<AuthPage> {
         const Text('Password'),
         const SizedBox(height: 8),
         TextField(
+          controller: _signUpPasswordController,
           decoration: InputDecoration(
             hintText: 'Create a password',
             border: OutlineInputBorder(
@@ -451,6 +490,7 @@ class _AuthPageState extends State<AuthPage> {
         const Text('Confirm Password'),
         const SizedBox(height: 8),
         TextField(
+          controller: _signUpConfirmPasswordController,
           decoration: InputDecoration(
             hintText: 'Confirm your password',
             border: OutlineInputBorder(
@@ -465,18 +505,21 @@ class _AuthPageState extends State<AuthPage> {
         const SizedBox(height: 15),
         Row(
           children: [
-            Checkbox(value: false, onChanged: (bool? value) {}),
-            const Expanded(
-              child: Text('I agree to the Terms & Conditions'),
+            Checkbox(
+              value: _agreedToTnC,
+              onChanged: (bool? value) {
+                setState(() {
+                  _agreedToTnC = value ?? false;
+                });
+              },
             ),
+            const Expanded(child: Text('I agree to the Terms & Conditions')),
           ],
         ),
         const SizedBox(height: 20),
         Center(
           child: ElevatedButton(
-            onPressed: () {
-              // TODO: Implement Sign Up
-            },
+            onPressed: _agreedToTnC ? _handleSignUp : null,
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF8BC34A), // Green color
               foregroundColor: Colors.white,
