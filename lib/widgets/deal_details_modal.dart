@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../utils/bank_links.dart';
 
 class DealDetailsModal extends StatelessWidget {
   final String title;
@@ -22,6 +24,7 @@ class DealDetailsModal extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final String officialWebsite = getBankSourceLink(bank);
     return Container(
       padding: const EdgeInsets.all(20),
       child: SingleChildScrollView(
@@ -37,12 +40,7 @@ class DealDetailsModal extends StatelessWidget {
                 color: Color(0xFF5B69E4),
               ),
             ),
-            const SizedBox(height: 10),
-            Text(
-              description,
-              style: const TextStyle(fontSize: 16, color: Colors.black87),
-            ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 5),
             Row(
               children: [
                 if (categories.isNotEmpty)
@@ -86,7 +84,12 @@ class DealDetailsModal extends StatelessWidget {
                   ),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 12),
+            Text(
+              description,
+              style: const TextStyle(fontSize: 16, color: Colors.black87),
+            ),
+            const SizedBox(height: 15),
             Row(
               children: [
                 Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
@@ -97,7 +100,7 @@ class DealDetailsModal extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
             const Text(
               'Terms & Conditions:',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
@@ -107,6 +110,31 @@ class DealDetailsModal extends StatelessWidget {
               termsAndConditions,
               style: const TextStyle(fontSize: 13, color: Colors.black87),
             ),
+            if (officialWebsite.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              const Text(
+                'Official website:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              const SizedBox(height: 4),
+              GestureDetector(
+                onTap: () async {
+                  final url = Uri.parse(officialWebsite);
+                  if (await canLaunchUrl(url)) {
+                    await launchUrl(url, mode: LaunchMode.externalApplication);
+                  }
+                },
+                child: Text(
+                  officialWebsite,
+                  style: const TextStyle(
+                    color: Color(0xFF5B69E4),
+                    decoration: TextDecoration.underline,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
             if (eligibleCards.isNotEmpty) ...[
               const SizedBox(height: 16),
               const Text(

@@ -53,6 +53,10 @@ dependencies:
   geolocator: ^14.0.2
   shared_preferences: ^2.5.3
   firebase_storage: ^12.4.10
+  url_launcher: ^6.2.6
+  firebase_in_app_messaging: ^0.8.1+10
+  firebase_app_check: ^0.3.2+10
+  firebase_app_installations: ^0.3.3
 
 
 dev_dependencies:

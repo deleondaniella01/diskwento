@@ -101,17 +101,12 @@ class InterestsPageState extends State<InterestsPage> {
                 children: [
                   Container(
                     padding: const EdgeInsets.all(12),
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.check,
-                      size: 50,
-                      color: Colors.blueAccent,
+                    child: SizedBox(
+                      width: 100,
+                      height: 100,
+                      child: Image.asset('assets/dibs.png', fit: BoxFit.contain),
                     ),
                   ),
-                  const SizedBox(height: 20),
                   const Text(
                     'Welcome to Dibs!',
                     style: TextStyle(
@@ -247,8 +242,16 @@ class InterestsPageState extends State<InterestsPage> {
                           children: [
                             TextButton(
                               onPressed: () {
-                                // TODO: Implement navigation back
-                                Navigator.pop(context);
+                                Navigator.pushReplacement(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => BanksPage(
+                                      title: 'Dibs',
+                                      analytics: widget.analytics,
+                                      observer: widget.observer,
+                                    ),
+                                  ),
+                                );
                               },
                               child: const Text('Back'),
                             ),

@@ -96,6 +96,11 @@ class _AuthPageState extends State<AuthPage> {
         idToken: googleAuth.idToken,
       );
       await _auth.signInWithCredential(credential);
+      // Log sign up event
+      await widget.analytics.logEvent(
+        name: 'sign_up',
+        parameters: {'method': 'google'},
+      );
       // Navigate to the home page after successful sign-in
       _navigateToBankPage(); // <--- change here
     } catch (e) {
@@ -174,6 +179,11 @@ class _AuthPageState extends State<AuthPage> {
       await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
+      );
+      // Log sign up event
+      await widget.analytics.logEvent(
+        name: 'sign_up',
+        parameters: {'method': 'email'},
       );
       // After successful sign up, go to BanksPage or InterestsPage
       _navigateToBankPage();
@@ -354,7 +364,7 @@ class _AuthPageState extends State<AuthPage> {
                               ),
                               const SizedBox(width: 10),
                               const Text(
-                                'Continue with Google',
+                                'Google Sign In',
                                 style: TextStyle(fontSize: 16),
                               ),
                             ],

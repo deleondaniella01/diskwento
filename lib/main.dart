@@ -5,6 +5,8 @@ import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_in_app_messaging/firebase_in_app_messaging.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:intl/intl.dart';
 import 'package:location/location.dart' as loc;
 import 'package:geoflutterfire_plus/geoflutterfire_plus.dart';
@@ -24,6 +26,8 @@ import 'package:firebase_ai/firebase_ai.dart' as fb_ai;
 import 'dart:convert';
 
 import 'widgets/deal_details_modal.dart';
+import 'utils/bank_links.dart';
+import 'utils/merchant_icons.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -32,6 +36,18 @@ Future<void> main() async {
       name: 'Dibs App',
       options: DefaultFirebaseOptions.currentPlatform,
     );
+  }
+
+   // Activate App Check with the correct provider for your platform
+  await FirebaseAppCheck.instance.activate(
+    androidProvider: AndroidProvider.debug, 
+  );
+
+  try {
+    final id = await FirebaseAppCheck.instance.getToken();
+    debugPrint('App Check token: $id');
+  } catch (e) {
+    debugPrint('App Check getToken error: $e');
   }
 
   final analytics = FirebaseAnalytics.instance;
@@ -67,28 +83,6 @@ Color colorFromHex(String hexColor) {
     hexColor = "FF$hexColor";
   }
   return Color(int.parse(hexColor, radix: 16));
-}
-
-// Helper function to map merchant_id (or a specific icon field) to IconData
-IconData getMerchantIcon(String merchantId) {
-  switch (merchantId.toLowerCase()) {
-    case 'jollibee':
-      return Icons.fastfood;
-    case 'mcdonalds':
-      return Icons.local_dining;
-    case 'grab':
-      return Icons.local_taxi;
-    case 'shopee':
-      return Icons.shopping_bag;
-    case 'lazada':
-      return Icons.devices_other;
-    case 'starbucks':
-      return Icons.local_cafe;
-    case 'bdo':
-      return Icons.account_balance;
-    default:
-      return Icons.store;
-  }
 }
 
 class MyHomePage extends StatefulWidget {
@@ -165,9 +159,7 @@ class Deal {
         parsedValidUntil = DateTime.parse(data['valid_until']);
       } catch (_) {
         try {
-          parsedValidUntil = DateFormat(
-            'MMMM d, yyyy',
-          ).parse(data['valid_until']);
+          parsedValidUntil = DateFormat('MMMM d, yyyy').parse(data['valid_until']);
         } catch (_) {
           parsedValidUntil = DateTime.now().add(const Duration(days: 30));
         }
@@ -260,6 +252,9 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
   String _locationStatus = 'Checking location...';
   String _locationAddress = 'Fetching address...';
 
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
+
   // Initialize Location instance
   final loc.Location _location = loc.Location();
 
@@ -316,7 +311,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
         '. Return ONLY a valid JSON array, where each item has these fields: title, description, bank, merchant_name, merchant_branch_name, merchant_address, terms_and_conditions, eligible_cards, discount_details, valid_until, categories. Do not include any explanation or text outside the JSON array.';
 
     // Call Firebase AI (Vertex AI via Firebase Extensions)
-    final ai = fb_ai.FirebaseAI.googleAI().generativeModel(
+    final ai = fb_ai.FirebaseAI.googleAI(appCheck: FirebaseAppCheck.instance).generativeModel(
       model: 'gemini-2.5-flash',
     );
 
@@ -390,27 +385,6 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
         return '03cffc';
       default:
         return '1c1c1c'; // default color
-    }
-  }
-
-  // source link for each bank
-  String getBankSourceLink(String? bank) {
-    switch ((bank ?? '').toUpperCase()) {
-      case 'BPI':
-        return 'https://www.bpi.com.ph/personal/rewards-and-promotions/promos?tab=Credit_cards';
-      case 'RCBC':
-        return 'https://rcbccredit.com/promos';
-      case 'BDO':
-        return 'https://www.deals.bdo.com.ph/catalog-page?type=credit-card';
-      case 'METROBANK':
-        return 'https://www.metrobank.com.ph/promos/credit-card-promos';
-      case 'SECURITY BANK':
-        return 'https://www.google.com';
-      case 'UNIONBANK':
-      case 'UNION BANK':
-        return ''; // No available link
-      default:
-        return '';
     }
   }
 
@@ -1194,16 +1168,6 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                 }
               },
             ),
-            // ListTile(
-            //   leading: const Icon(Icons.settings),
-            //   title: const Text('Settings'),
-            //   onTap: () {
-            //     Navigator.pop(context);
-            //     setMessage(
-            //        'Coming soon..',
-            //     ); // Close the drawer
-            //   },
-            // ),
             const Divider(), // A visual separator
             ListTile(
               leading: const Icon(Icons.logout),
@@ -1384,45 +1348,76 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                 ),
               ),
             ),
-            const SizedBox(height: 24),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16.0),
-              child: Text(
-                'All Deals',
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF323B60),
+            Container(
+              margin: const EdgeInsets.only(top: 10.0),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 5.0),
+                child: Text(
+                  'All Deals',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF323B60),
+                  ),
                 ),
               ),
             ),
-            const SizedBox(height: 16),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: <Widget>[
-                    _buildCategoryFilterButton(
-                      'All Categories',
-                      _selectedCategory == 'All Categories',
-                      Colors.blue,
-                      () => _selectCategoryFilter('All Categories'),
+              padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 5.0),
+              child: Row(
+                children: [
+                  // Search field
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: InputDecoration(
+                        hintText: 'Search deals...',
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12.0),
+                          borderSide: BorderSide.none,
+                        ),
+                        filled: true,
+                        fillColor: Colors.white70,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 0, horizontal: 16),
+                      ),
+                      onChanged: (value) {
+                        setState(() {
+                          _searchQuery = value;
+                        });
+                      },
                     ),
-                    ..._categories.map(
-                      (cat) => _buildCategoryFilterButton(
-                        cat,
-                        _selectedCategory == cat,
-                        Colors
-                            .orange, // You can customize color per category if you want
-                        () => _selectCategoryFilter(cat),
+                  ),
+                  const SizedBox(width: 12),
+                  // Category filter
+                  Expanded(
+                    flex: 3,
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: <Widget>[
+                          _buildCategoryFilterButton(
+                            'All Categories',
+                            _selectedCategory == 'All Categories',
+                            Colors.blue,
+                            () => _selectCategoryFilter('All Categories'),
+                          ),
+                          ..._categories.map(
+                            (cat) => _buildCategoryFilterButton(
+                              cat,
+                              _selectedCategory == cat,
+                              Colors.orange,
+                              () => _selectCategoryFilter(cat),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 16),
             StreamBuilder<QuerySnapshot>(
               stream: _dealsCollection.snapshots(),
               builder: (context, snapshot) {
@@ -1447,6 +1442,14 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                     .where((deal) {
                       if (_selectedCategory == 'All Categories') return true;
                       return deal.categories.contains(_selectedCategory);
+                    })
+                    .where((deal) {
+                      if (_searchQuery.isEmpty) return true;
+                      final query = _searchQuery.toLowerCase();
+                      return deal.title.toLowerCase().contains(query) ||
+                            deal.description.toLowerCase().contains(query) ||
+                            deal.bank.toLowerCase().contains(query) ||
+                            deal.merchantName.toLowerCase().contains(query);
                     })
                     .toList();
 
@@ -1513,8 +1516,7 @@ class _MyHomePageState extends State<MyHomePage> with WidgetsBindingObserver {
                       distance: deal.distance,
                       availability: deal.availability,
                       termsAndConditions:
-                          deal.termsAndConditions ??
-                          'No terms and conditions available.',
+                          deal.termsAndConditions ?? 'No terms and conditions available.',
                       eligibleCards: deal.eligibleCards,
                     );
                   }).toList(),
@@ -1818,7 +1820,7 @@ class NewDealCard extends StatelessWidget {
                             ),
                             child: Text(
                               discountDetails.length > 10
-                                  ? '${discountDetails.substring(0, 15)}...'
+                                  ? '${discountDetails.substring(0, discountDetails.length.clamp(0, 15))}...'
                                   : discountDetails,
                               style: TextStyle(
                                 fontSize: 10,

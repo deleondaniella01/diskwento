@@ -8,28 +8,12 @@ import 'package:location/location.dart';
 import 'package:geolocator/geolocator.dart'; // Still needed for distance calculation
 import 'package:fluttertoast/fluttertoast.dart';
 import 'package:intl/intl.dart'; // Import for DateFormat
+import 'package:firebase_app_check/firebase_app_check.dart';
 import '../widgets/deal_details_modal.dart';
+import '../utils/merchant_icons.dart';
 
 // Import with alias for firebase_ai
 import 'package:firebase_ai/firebase_ai.dart' as fb_ai;
-
-// Helper function to map merchant_id (or a specific icon field) to IconData
-IconData getMerchantIcon(String merchantId) {
-  switch (merchantId.toLowerCase()) {
-    case 'fastfood':
-      return Icons.fastfood;
-    case 'dining':
-      return Icons.local_dining;
-    case 'shop':
-      return Icons.shopping_bag;
-    case 'travel':
-      return Icons.airplanemode_active;
-    case 'banking':
-      return Icons.account_balance;
-    default:
-      return Icons.store;
-  }
-}
 
 class NearbyDealsScreen extends StatefulWidget {
   final LocationData userLocation;
@@ -472,13 +456,18 @@ class _NearbyDealsScreenState extends State<NearbyDealsScreen> {
                     final String locationText =
                         '${(distance / 1000).toStringAsFixed(2)} km away';
 
-                    // Add this after discountDetails:
-                    final Timestamp? validUntilTimestamp = deal['valid_until'];
                     String formattedValidUntil = '';
-                    if (validUntilTimestamp != null) {
-                      formattedValidUntil = DateFormat(
-                        'MMM dd, yyyy',
-                      ).format(validUntilTimestamp.toDate());
+                    final dynamic validUntilRaw = deal['valid_until'];
+                    if (validUntilRaw != null) {
+                      if (validUntilRaw is Timestamp) {
+                        formattedValidUntil = DateFormat('MMM dd, yyyy').format(validUntilRaw.toDate());
+                      } else if (validUntilRaw is String) {
+                        try {
+                          formattedValidUntil = DateFormat('MMM dd, yyyy').format(DateTime.parse(validUntilRaw));
+                        } catch (_) {
+                          formattedValidUntil = validUntilRaw; // fallback to raw string
+                        }
+                      }
                     }
 
                     return Card(
@@ -574,7 +563,9 @@ class _NearbyDealsScreenState extends State<NearbyDealsScreen> {
                                                     BorderRadius.circular(4),
                                               ),
                                               child: Text(
-                                                deal['categories'],
+                                                deal['categories'] is List
+                                                    ? (deal['categories'] as List).join(', ')
+                                                    : (deal['categories'] ?? ''),
                                                 style: const TextStyle(
                                                   fontSize: 10,
                                                   color: Colors.black54,

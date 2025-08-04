@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart'; // For date formatting
 import '../widgets/deal_details_modal.dart';
+import '../utils/merchant_icons.dart';
 
 // Helper function to convert hex string to Color object
 Color colorFromHex(String hexColor) {
@@ -11,24 +12,6 @@ Color colorFromHex(String hexColor) {
     hexColor = "FF$hexColor";
   }
   return Color(int.parse(hexColor, radix: 16));
-}
-
-// Helper function to map merchant_id (or a specific icon field) to IconData
-IconData getMerchantIcon(String merchantId) {
-  switch (merchantId.toLowerCase()) {
-    case 'fastfood':
-      return Icons.fastfood;
-    case 'dining':
-      return Icons.local_dining;
-    case 'shop':
-      return Icons.shopping_bag;
-    case 'travel':
-      return Icons.airplanemode_active;
-    case 'banking':
-      return Icons.account_balance;
-    default:
-      return Icons.store;
-  }
 }
 
 class ExpiringDealsScreen extends StatefulWidget {
