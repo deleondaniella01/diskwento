@@ -42,8 +42,9 @@ import 'package:myapp/main.dart'; // Adjust import path if necessary
 //   mockito: ^5.x.x # Use the latest stable version
 
 class MockFirebaseAnalytics extends Mock implements FirebaseAnalytics {}
-class MockFirebaseAnalyticsObserver extends Mock implements FirebaseAnalyticsObserver {}
 
+class MockFirebaseAnalyticsObserver extends Mock
+    implements FirebaseAnalyticsObserver {}
 
 void main() {
   testWidgets('App displays title', (WidgetTester tester) async {
@@ -52,14 +53,16 @@ void main() {
     final mockObserver = MockFirebaseAnalyticsObserver();
 
     // Build our app with the mock instances and trigger a frame.
-    await tester.pumpWidget(MyApp(
-      analytics: mockAnalytics,
-      observer: mockObserver,
-    ));
+    await tester.pumpWidget(
+      MyApp(analytics: mockAnalytics, observer: mockObserver),
+    );
 
     // Verify that the app title is displayed.
     // Replace 'Dibs Home' with the actual text your app displays as its title.
-    expect(find.text('Dibs'), findsOneWidget); // Changed to 'Dibs' as seen in main.dart app bar
+    expect(
+      find.text('Dibs'),
+      findsOneWidget,
+    ); // Changed to 'Dibs' as seen in main.dart app bar
     expect(find.text('Your exclusive claim to best deals'), findsOneWidget);
 
     // You can add more specific tests here based on your UI.
